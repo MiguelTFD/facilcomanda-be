@@ -1,0 +1,260 @@
+FACILCOMANDA - API DOCUMENTATION & CONSIDERATIONS
+=================================================
+
+This document outlines all the REST API endpoints implemented in the FacilComanda ERP Backend, along with critical security considerations and JSON payload examples.
+
+=================================================
+1. AUTHENTICATION & REGISTRATION API (/api/auth)
+=================================================
+- POST /api/auth/login
+  Description: Authenticates a user and returns a JWT token.
+  Request:
+  {
+    "email": "nuevo.mozo@facilcomanda.com",
+    "password": "supersegura123"
+  }
+  Response (200 OK):
+  {
+      "token": "eyJhbGciOiJIUzI1NiJ9.eyJvcmdhbml6YXRpb25JZCI6MSwicm9sZSI6IkNBU0hJRVIi...",
+      "user": {
+          "id": 11,
+          "email": "nuevo.mozo@facilcomanda.com",
+          "firstName": "Carlos",
+          "lastName": "Mendoza",
+          "roleName": "CASHIER",
+          "organizationId": 1
+      }
+  }
+
+- POST /api/auth/register
+  Description: Registers a new WEB_OWNER/ORG_MASTER and auto-generates their initial Organization.
+  Request:
+  {
+    "firstName": "Admin",
+    "lastName": "Super",
+    "email": "admin@facilcomanda.com",
+    "password": "supersegura123",
+    "organizationName": "Mi Restaurante"
+  }
+  Response (201 Created):
+  {
+    "id": 1,
+    "email": "admin@facilcomanda.com",
+    "firstName": "Admin",
+    "lastName": "Super",
+    "roleName": "WEB_OWNER",
+    "organizationId": 1
+  }
+
+=================================================
+2. ORGANIZATION API (/api/organizations)
+=================================================
+- POST /api/organizations
+  Consideration: STRICTLY secured. Only users with the global "WEB_OWNER" role can execute this.
+  Request:
+  {
+    "name": "Sucursal Norte",
+    "taxIdentificationNumber": "123456789",
+    "taxIdentificationType": "RUC"
+  }
+  Response (201 Created):
+  {
+    "id": 2,
+    "name": "Sucursal Norte",
+    "taxIdentificationNumber": "123456789",
+    "taxIdentificationType": "RUC"
+  }
+
+- GET /api/organizations/my
+  Returns the Organization object for the currently authenticated user.
+
+- PUT /api/organizations/my
+  Consideration: Only users with "ORG_MASTER" role.
+  Request: (Same format as POST Request)
+
+=================================================
+3. ORDERS API (/api/orders)
+=================================================
+- POST /api/orders
+  Considerations: Protected against double-clicks (Idempotency). Calculates prices securely on backend. Reduces stock.
+  Request:
+  {
+    "restaurantTableId": 5, // Optional. Omit for TAKEAWAY
+    "type": "DINE_IN",
+    "idempotencyKey": "550e8400-e29b-41d4-a716-446655440000",
+    "items": [
+      {
+        "productId": 10,
+        "quantity": 2,
+        "comments": "Sin cebolla"
+      }
+    ]
+  }
+  Response (201 Created):
+  {
+    "id": 100,
+    "restaurantTableId": 5,
+    "tableName": "Mesa 1",
+    "floorName": "Terraza",
+    "type": "DINE_IN",
+    "status": "PENDING",
+    "total": 25.50,
+    "orderDate": "2026-06-22T08:15:00",
+    "items": [
+      {
+        "id": 150,
+        "productId": 10,
+        "productName": "Hamburguesa Clasica",
+        "quantity": 2,
+        "subtotal": 25.50,
+        "comments": "Sin cebolla"
+      }
+    ]
+  }
+
+- GET /api/orders
+  Returns: List of active OrderResponses (Same format as above response).
+
+=================================================
+4. CATEGORIES API (/api/categories)
+=================================================
+Standard CRUD. Bound by @Filter("tenantFilter").
+- POST /api/categories
+  Request:
+  {
+    "name": "Bebidas",
+    "description": "Bebidas frias y calientes",
+    "parentCategoryId": null // Optional
+  }
+  Response (201 Created):
+  {
+    "id": 3,
+    "name": "Bebidas",
+    "description": "Bebidas frias y calientes",
+    "parentCategoryId": null
+  }
+
+=================================================
+5. PRODUCTS API (/api/products)
+=================================================
+Standard CRUD. Protected by @Version for optimistic locking.
+- POST /api/products
+  Request:
+  {
+    "name": "Coca Cola 1L",
+    "description": "Gaseosa personal",
+    "stock": 50,
+    "unitPrice": 2.50,
+    "discount": 0.00,
+    "expirationDate": "2027-01-01T00:00:00",
+    "categoryIds": [3]
+  }
+  Response (201 Created):
+  {
+    "id": 10,
+    "name": "Coca Cola 1L",
+    "description": "Gaseosa personal",
+    "stock": 50,
+    "unitPrice": 2.50,
+    "discount": 0.00,
+    "expirationDate": "2027-01-01T00:00:00"
+  }
+
+=================================================
+6. RESTAURANT TABLES API (/api/tables)
+=================================================
+Standard CRUD.
+- POST /api/tables
+  Request:
+  {
+    "name": "Mesa 1",
+    "description": "Mesa cerca a la ventana",
+    "state": "AVAILABLE",
+    "chairs": 4,
+    "floorId": 1
+  }
+  Response (201 Created):
+  {
+    "id": 5,
+    "name": "Mesa 1",
+    "description": "Mesa cerca a la ventana",
+    "state": "AVAILABLE",
+    "chairs": 4,
+    "organizationId": 1,
+    "floorId": 1,
+    "floorName": "Terraza"
+  }
+
+- GET /api/tables/floor/{floorId}
+  Returns: List of tables belonging to a specific floor.
+
+=================================================
+7. RESTAURANT FLOORS API (/api/restaurant-floors)
+=================================================
+Standard CRUD.
+- POST /api/restaurant-floors
+  Request:
+  {
+    "name": "Terraza",
+    "description": "Zona al aire libre"
+  }
+  Response (201 Created):
+  {
+    "id": 1,
+    "name": "Terraza",
+    "description": "Zona al aire libre",
+    "organizationId": 1
+  }
+
+=================================================
+8. ROLES API (/api/roles)
+=================================================
+Standard CRUD.
+- POST /api/roles
+  Request:
+  {
+    "name": "MESERO",
+    "description": "Mesero general"
+  }
+  Response (201 Created):
+  {
+    "id": 2,
+    "name": "MESERO",
+    "description": "Mesero general"
+  }
+
+=================================================
+9. USERS (STAFF) API (/api/users)
+=================================================
+Standard CRUD. For Tenant Admins to create staff.
+- POST /api/users
+  Request:
+  {
+    "firstName": "Juan",
+    "lastName": "Perez",
+    "email": "juan.perez@facilcomanda.com",
+    "password": "password123",
+    "roleId": 2
+  }
+  Response (201 Created):
+  {
+    "id": 12,
+    "email": "juan.perez@facilcomanda.com",
+    "firstName": "Juan",
+    "lastName": "Perez",
+    "roleName": "MESERO",
+    "organizationId": 1
+  }
+
+=================================================
+CRITICAL ARCHITECTURAL CONSIDERATIONS (GLOBAL)
+=================================================
+1. Tenant Isolation (IDOR Protection):
+Every single query, fetch, or modification explicitly requires the `organizationId`. We use a hybrid approach of JPA `findByIdAndOrganizationId` and Hibernate's `@Filter(name = "tenantFilter")` to make cross-tenant data leaks impossible.
+
+2. Stateless Authentication:
+We utilize JWTs. The `organizationId` is baked directly into the token claims during login. We do not trust the frontend to send the `organizationId`.
+
+3. Exception Handling Strategy:
+Any concurrency collision during checkout (Optimistic Locking) or Idempotency violation throws an exception handled globally to return HTTP 409 Conflict.
+Additionally, any attempt to delete an entity (like a Floor or Table) that is actively referenced by another entity (like a Table or Order) will throw a DataIntegrityViolationException, gracefully caught and mapped to a 409 Conflict to prevent 500 server crashes.
