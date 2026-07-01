@@ -14,5 +14,6 @@ public record OrderResponse(
     OrderStatus status,
     BigDecimal total,
     LocalDateTime orderDate,
-    List<OrderItemResponse> items
+    List<OrderItemResponse> items,
+    Boolean modified
 ) {}

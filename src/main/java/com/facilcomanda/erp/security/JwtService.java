@@ -44,13 +44,17 @@ public class JwtService {
     }
 
     private String buildToken(Map<String, Object> extraClaims, String subject, long expiration) {
-        return Jwts.builder()
+        var tokenBuilder = Jwts.builder()
                 .claims(extraClaims)
                 .subject(subject)
                 .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(getSignInKey(), Jwts.SIG.HS256)
-                .compact();
+                .signWith(getSignInKey(), Jwts.SIG.HS256);
+
+        if (expiration > 0) {
+            tokenBuilder.expiration(new Date(System.currentTimeMillis() + expiration));
+        }
+
+        return tokenBuilder.compact();
     }
 
     public boolean isTokenValid(String token) {
@@ -62,7 +66,8 @@ public class JwtService {
     }
 
     private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+        Date expiration = extractExpiration(token);
+        return expiration != null && expiration.before(new Date());
     }
 
     private Date extractExpiration(String token) {

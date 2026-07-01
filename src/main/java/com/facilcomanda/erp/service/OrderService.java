@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class OrderService {
+    private static final String MODIFIED_ORDER_MARKER = "MODIFIED";
 
     private final OrderRepository orderRepository;
     private final RestaurantTableRepository restaurantTableRepository;
@@ -147,6 +148,60 @@ public class OrderService {
         return mapToResponse(orderRepository.save(order));
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    public OrderResponse updateOrder(Long id, OrderRequest request, Long organizationId) {
+        Order order = orderRepository.findByIdAndOrganizationId(id, organizationId)
+                .orElseThrow(() -> new RuntimeException("Order not found or unauthorized"));
+
+        if (order.getStatus() == OrderStatus.PAID || order.getStatus() == OrderStatus.CANCELLED) {
+            throw new RuntimeException("Paid or cancelled orders cannot be modified");
+        }
+
+        for (OrderItem existingItem : order.getOrderItems()) {
+            Product product = existingItem.getProduct();
+            product.setStock(product.getStock() + existingItem.getQuantity());
+            productRepository.save(product);
+        }
+
+        order.getOrderItems().clear();
+        BigDecimal total = BigDecimal.ZERO;
+
+        for (OrderItemRequest itemRequest : request.items()) {
+            Product product = productRepository.findByIdAndOrganizationId(itemRequest.productId(), organizationId)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Product ID " + itemRequest.productId() + " not found or unauthorized"));
+
+            if (product.getStock() < itemRequest.quantity()) {
+                throw new RuntimeException("Insufficient stock for product: " + product.getName());
+            }
+
+            product.setStock(product.getStock() - itemRequest.quantity());
+            productRepository.save(product);
+
+            OrderItem orderItem = new OrderItem();
+            orderItem.setOrganizationId(organizationId);
+            orderItem.setProduct(product);
+            orderItem.setQuantity(itemRequest.quantity());
+            orderItem.setComments(itemRequest.comments());
+
+            BigDecimal price = product.getUnitPrice();
+            if (product.getDiscount() != null) {
+                price = price.subtract(product.getDiscount());
+            }
+
+            BigDecimal subtotal = price.multiply(BigDecimal.valueOf(itemRequest.quantity()));
+            orderItem.setSubtotal(subtotal);
+
+            order.addOrderItem(orderItem);
+            total = total.add(subtotal);
+        }
+
+        order.setTotal(total);
+        order.setComments(MODIFIED_ORDER_MARKER);
+
+        return mapToResponse(orderRepository.save(order));
+    }
+
     private OrderResponse mapToResponse(Order order) {
         List<OrderItemResponse> itemResponses = order.getOrderItems().stream().map(item -> new OrderItemResponse(
                 item.getId(),
@@ -165,6 +220,7 @@ public class OrderService {
                 order.getStatus(),
                 order.getTotal(),
                 order.getOrderDate(),
-                itemResponses);
+                itemResponses,
+                MODIFIED_ORDER_MARKER.equals(order.getComments()));
     }
 }

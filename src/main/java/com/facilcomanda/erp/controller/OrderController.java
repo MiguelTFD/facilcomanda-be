@@ -57,4 +57,12 @@ public class OrderController {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(orderService.updateOrderStatus(id, request, orgId));
     }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<OrderResponse> updateOrder(@PathVariable Long id,
+            @Valid @RequestBody OrderRequest request,
+            Authentication authentication) {
+        Long orgId = getOrganizationId(authentication);
+        return ResponseEntity.ok(orderService.updateOrder(id, request, orgId));
+    }
 }
