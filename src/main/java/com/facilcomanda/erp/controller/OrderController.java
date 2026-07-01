@@ -2,6 +2,7 @@ package com.facilcomanda.erp.controller;
 
 import com.facilcomanda.erp.dto.OrderRequest;
 import com.facilcomanda.erp.dto.OrderResponse;
+import com.facilcomanda.erp.dto.OrderStatusRequest;
 import com.facilcomanda.erp.security.CustomAuthentication;
 import com.facilcomanda.erp.service.OrderService;
 import jakarta.validation.Valid;
@@ -41,5 +42,19 @@ public class OrderController {
     public ResponseEntity<List<OrderResponse>> getActiveOrders(Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(orderService.getActiveOrders(orgId));
+    }
+
+    @GetMapping("/pending-payment/occupied-tables")
+    public ResponseEntity<List<OrderResponse>> getPendingPaymentOrdersWithOccupiedTables(Authentication authentication) {
+        Long orgId = getOrganizationId(authentication);
+        return ResponseEntity.ok(orderService.getPendingPaymentOrdersWithOccupiedTables(orgId));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<OrderResponse> updateOrderStatus(@PathVariable Long id,
+            @Valid @RequestBody OrderStatusRequest request,
+            Authentication authentication) {
+        Long orgId = getOrganizationId(authentication);
+        return ResponseEntity.ok(orderService.updateOrderStatus(id, request, orgId));
     }
 }

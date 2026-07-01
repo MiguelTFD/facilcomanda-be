@@ -4,6 +4,7 @@ import com.facilcomanda.erp.dto.OrderItemRequest;
 import com.facilcomanda.erp.dto.OrderItemResponse;
 import com.facilcomanda.erp.dto.OrderRequest;
 import com.facilcomanda.erp.dto.OrderResponse;
+import com.facilcomanda.erp.dto.OrderStatusRequest;
 import com.facilcomanda.erp.model.Order;
 import com.facilcomanda.erp.model.OrderItem;
 import com.facilcomanda.erp.model.Product;
@@ -104,10 +105,46 @@ public class OrderService {
         return mapToResponse(savedOrder);
     }
 
+    @Transactional(readOnly = true)
     public List<OrderResponse> getActiveOrders(Long organizationId) {
         return orderRepository.findByOrganizationId(organizationId).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getPendingPaymentOrdersWithOccupiedTables(Long organizationId) {
+        return orderRepository.findByOrganizationIdAndStatusInAndRestaurantTable_State(
+                        organizationId,
+                        List.of(OrderStatus.PENDING, OrderStatus.DELIVERED),
+                        TableState.OCCUPIED)
+                .stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public OrderResponse updateOrderStatus(Long id, OrderStatusRequest request, Long organizationId) {
+        Order order = orderRepository.findByIdAndOrganizationId(id, organizationId)
+                .orElseThrow(() -> new RuntimeException("Order not found or unauthorized"));
+
+        if (order.getStatus() == OrderStatus.PAID) {
+            throw new RuntimeException("Paid orders cannot be modified");
+        }
+
+        if (request.status() == OrderStatus.PAID) {
+            throw new RuntimeException("Use the charge endpoint to mark an order as paid");
+        }
+
+        order.setStatus(request.status());
+
+        RestaurantTable table = order.getRestaurantTable();
+        if (table != null && request.status() == OrderStatus.CANCELLED) {
+            table.setState(TableState.AVAILABLE);
+            restaurantTableRepository.save(table);
+        }
+
+        return mapToResponse(orderRepository.save(order));
     }
 
     private OrderResponse mapToResponse(Order order) {
