@@ -2,13 +2,14 @@ package com.facilcomanda.erp.controller;
 
 import com.facilcomanda.erp.dto.OrganizationRequest;
 import com.facilcomanda.erp.dto.OrganizationResponse;
+import com.facilcomanda.erp.security.AuthorizationRules;
 import com.facilcomanda.erp.security.CustomAuthentication;
 import com.facilcomanda.erp.service.OrganizationService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -21,12 +22,6 @@ public class OrganizationController {
         this.organizationService = organizationService;
     }
 
-    private boolean hasRole(Authentication authentication, String roleName) {
-        return authentication.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .anyMatch(role -> role.equals(roleName) || role.equals("ROLE_" + roleName));
-    }
-
     private Long getOrganizationId(Authentication authentication) {
         if (authentication instanceof CustomAuthentication customAuth) {
             return customAuth.getOrganizationId();
@@ -35,10 +30,8 @@ public class OrganizationController {
     }
 
     @PostMapping
+    @PreAuthorize(AuthorizationRules.IS_SUPERADMIN)
     public ResponseEntity<OrganizationResponse> createOrganization(@Valid @RequestBody OrganizationRequest request, Authentication authentication) {
-        if (!hasRole(authentication, "WEB_OWNER")) {
-            throw new RuntimeException("Unauthorized: Only WEB_OWNER can create organizations");
-        }
         return new ResponseEntity<>(organizationService.createOrganization(request), HttpStatus.CREATED);
     }
 
@@ -49,10 +42,8 @@ public class OrganizationController {
     }
 
     @PutMapping("/my")
+    @PreAuthorize(AuthorizationRules.IS_ADMIN)
     public ResponseEntity<OrganizationResponse> updateMyOrganization(@Valid @RequestBody OrganizationRequest request, Authentication authentication) {
-        if (!hasRole(authentication, "ORG_MASTER")) {
-            throw new RuntimeException("Unauthorized: Only ORG_MASTER can update this organization");
-        }
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(organizationService.updateOrganization(orgId, request));
     }

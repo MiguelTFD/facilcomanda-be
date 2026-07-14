@@ -2,11 +2,13 @@ package com.facilcomanda.erp.controller;
 
 import com.facilcomanda.erp.dto.ProductRequest;
 import com.facilcomanda.erp.dto.ProductResponse;
+import com.facilcomanda.erp.security.AuthorizationRules;
 import com.facilcomanda.erp.security.CustomAuthentication;
 import com.facilcomanda.erp.service.ProductService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,30 +32,35 @@ public class ProductController {
     }
 
     @PostMapping
+    @PreAuthorize(AuthorizationRules.IS_ADMIN)
     public ResponseEntity<ProductResponse> createProduct(@Valid @RequestBody ProductRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return new ResponseEntity<>(productService.createProduct(request, orgId), HttpStatus.CREATED);
     }
 
     @GetMapping
+    @PreAuthorize(AuthorizationRules.STAFF_READ)
     public ResponseEntity<List<ProductResponse>> getAllProducts(Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(productService.getAllProducts(orgId));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize(AuthorizationRules.STAFF_READ)
     public ResponseEntity<ProductResponse> getProductById(@PathVariable Long id, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(productService.getProductById(id, orgId));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize(AuthorizationRules.IS_ADMIN)
     public ResponseEntity<ProductResponse> updateProduct(@PathVariable Long id, @Valid @RequestBody ProductRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(productService.updateProduct(id, request, orgId));
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize(AuthorizationRules.IS_ADMIN)
     public ResponseEntity<Void> deleteProduct(@PathVariable Long id, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         productService.deleteProduct(id, orgId);
