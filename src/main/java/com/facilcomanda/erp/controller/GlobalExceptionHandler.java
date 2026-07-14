@@ -6,6 +6,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.TransactionSystemException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -67,6 +68,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<Map<String, String>> handleOptimisticLockingFailureException(OptimisticLockingFailureException ex) {
         return buildErrorResponse("The resource has been modified by another user. Please try again.", HttpStatus.CONFLICT);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, String>> handleAccessDeniedException(AccessDeniedException ex) {
+        return buildErrorResponse("Acceso denegado", HttpStatus.FORBIDDEN);
     }
 
     @ExceptionHandler(RuntimeException.class)
