@@ -8,9 +8,13 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.List;
+
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Soporte compartido para los tests de autorización por rol (feature 001).
@@ -35,6 +39,17 @@ public final class AuthTestSupport {
 
     public static RequestPostProcessor as(RoleName role) {
         return SecurityMockMvcRequestPostProcessors.authentication(authenticationFor(role));
+    }
+
+    /**
+     * Verifica el estado esperado; si es 403, exige además el cuerpo de la
+     * decisión D2: {@code {"message":"Acceso denegado"}}.
+     */
+    public static void assertAccess(ResultActions actions, int expectedStatus) throws Exception {
+        actions.andExpect(status().is(expectedStatus));
+        if (expectedStatus == 403) {
+            actions.andExpect(jsonPath("$.message").value("Acceso denegado"));
+        }
     }
 
     /**
