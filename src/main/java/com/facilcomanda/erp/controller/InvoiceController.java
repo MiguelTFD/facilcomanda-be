@@ -2,12 +2,14 @@ package com.facilcomanda.erp.controller;
 
 import com.facilcomanda.erp.dto.InvoicePaymentRequest;
 import com.facilcomanda.erp.dto.InvoiceResponse;
+import com.facilcomanda.erp.security.AuthorizationRules;
 import com.facilcomanda.erp.security.CustomAuthentication;
 import com.facilcomanda.erp.service.InvoiceService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,6 +36,7 @@ public class InvoiceController {
     }
 
     @PostMapping("/orders/{orderId}/charge")
+    @PreAuthorize(AuthorizationRules.IS_CAJERO)
     public ResponseEntity<InvoiceResponse> chargeOrder(@PathVariable Long orderId,
             @Valid @RequestBody InvoicePaymentRequest request,
             Authentication authentication) {
@@ -43,18 +46,21 @@ public class InvoiceController {
     }
 
     @GetMapping
+    @PreAuthorize(AuthorizationRules.IS_ADMIN)
     public ResponseEntity<List<InvoiceResponse>> getInvoices(Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(invoiceService.getInvoices(orgId));
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize(AuthorizationRules.IS_ADMIN)
     public ResponseEntity<InvoiceResponse> getInvoiceById(@PathVariable Long id, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(invoiceService.getInvoiceById(id, orgId));
     }
 
     @GetMapping("/orders/{orderId}")
+    @PreAuthorize(AuthorizationRules.IS_ADMIN)
     public ResponseEntity<InvoiceResponse> getInvoiceByOrderId(@PathVariable Long orderId,
             Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
