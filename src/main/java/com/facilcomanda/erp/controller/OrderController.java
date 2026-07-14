@@ -3,11 +3,13 @@ package com.facilcomanda.erp.controller;
 import com.facilcomanda.erp.dto.OrderRequest;
 import com.facilcomanda.erp.dto.OrderResponse;
 import com.facilcomanda.erp.dto.OrderStatusRequest;
+import com.facilcomanda.erp.security.AuthorizationRules;
 import com.facilcomanda.erp.security.CustomAuthentication;
 import com.facilcomanda.erp.service.OrderService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,6 +33,7 @@ public class OrderController {
     }
 
     @PostMapping
+    @PreAuthorize(AuthorizationRules.IS_MESERO)
     public ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody OrderRequest request,
             Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
@@ -39,18 +42,21 @@ public class OrderController {
     }
 
     @GetMapping
+    @PreAuthorize(AuthorizationRules.STAFF_READ)
     public ResponseEntity<List<OrderResponse>> getActiveOrders(Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(orderService.getActiveOrders(orgId));
     }
 
     @GetMapping("/pending-payment/occupied-tables")
+    @PreAuthorize(AuthorizationRules.IS_CAJERO)
     public ResponseEntity<List<OrderResponse>> getPendingPaymentOrdersWithOccupiedTables(Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(orderService.getPendingPaymentOrdersWithOccupiedTables(orgId));
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize(AuthorizationRules.KITCHEN_STATUS)
     public ResponseEntity<OrderResponse> updateOrderStatus(@PathVariable Long id,
             @Valid @RequestBody OrderStatusRequest request,
             Authentication authentication) {
@@ -59,6 +65,7 @@ public class OrderController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize(AuthorizationRules.IS_MESERO)
     public ResponseEntity<OrderResponse> updateOrder(@PathVariable Long id,
             @Valid @RequestBody OrderRequest request,
             Authentication authentication) {
