@@ -2,11 +2,13 @@ package com.facilcomanda.erp.controller;
 
 import com.facilcomanda.erp.dto.UserRequest;
 import com.facilcomanda.erp.dto.UserResponse;
+import com.facilcomanda.erp.security.AuthorizationRules;
 import com.facilcomanda.erp.security.CustomAuthentication;
 import com.facilcomanda.erp.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,6 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
+@PreAuthorize(AuthorizationRules.IS_ADMIN)
 public class UserController {
 
     private final UserService userService;
