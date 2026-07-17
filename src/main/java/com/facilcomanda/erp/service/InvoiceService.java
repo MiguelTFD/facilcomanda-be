@@ -2,11 +2,16 @@ package com.facilcomanda.erp.service;
 
 import com.facilcomanda.erp.dto.InvoicePaymentRequest;
 import com.facilcomanda.erp.dto.InvoiceResponse;
+import com.facilcomanda.erp.dto.PaymentEntryRequest;
+import com.facilcomanda.erp.dto.PaymentEntryResponse;
+import com.facilcomanda.erp.exception.PaymentValidationException;
 import com.facilcomanda.erp.model.Invoice;
+import com.facilcomanda.erp.model.InvoicePayment;
 import com.facilcomanda.erp.model.Order;
 import com.facilcomanda.erp.model.RestaurantTable;
 import com.facilcomanda.erp.model.User;
 import com.facilcomanda.erp.model.enums.OrderStatus;
+import com.facilcomanda.erp.model.enums.PaymentMethod;
 import com.facilcomanda.erp.model.enums.TableState;
 import com.facilcomanda.erp.repository.InvoiceRepository;
 import com.facilcomanda.erp.repository.OrderRepository;
@@ -15,7 +20,9 @@ import com.facilcomanda.erp.repository.UserRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,9 +67,7 @@ public class InvoiceService {
         }
 
         BigDecimal orderTotal = order.getTotal() != null ? order.getTotal() : BigDecimal.ZERO;
-        if (request.amountPaid().compareTo(orderTotal) < 0) {
-            throw new RuntimeException("Amount paid cannot be less than order total");
-        }
+        PaymentTotals totals = validatePayments(request.payments(), orderTotal);
 
         User cashier = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -74,13 +79,22 @@ public class InvoiceService {
         invoice.setOrderNumber(order.getId());
         invoice.setInvoiceNumber(buildInvoiceNumber(organizationId, order.getId(), paidAt));
         invoice.setOrderTotal(orderTotal);
-        invoice.setAmountPaid(request.amountPaid());
-        invoice.setChangeAmount(request.amountPaid().subtract(orderTotal));
-        invoice.setPaymentMethod(request.paymentMethod().trim());
+        invoice.setAmountPaid(totals.sum());
+        invoice.setChangeAmount(totals.sum().subtract(orderTotal));
+        invoice.setPaymentMethod(totals.summaryMethod());
         invoice.setPaidAt(paidAt);
         invoice.setCashier(cashier);
         invoice.setCashierEmail(cashier.getEmail());
         invoice.setNotes(request.notes());
+
+        for (PaymentEntryRequest entry : request.payments()) {
+            InvoicePayment payment = new InvoicePayment();
+            payment.setOrganizationId(organizationId);
+            payment.setMethod(entry.method());
+            payment.setAmount(entry.amount());
+            payment.setReference(normalizeReference(entry.reference()));
+            invoice.addPayment(payment);
+        }
 
         RestaurantTable table = order.getRestaurantTable();
         if (table != null) {
@@ -118,11 +132,71 @@ public class InvoiceService {
         return mapToResponse(invoice);
     }
 
+    /**
+     * Valida las reglas de cobro multimétodo (feature 020) y devuelve la suma y
+     * el resumen de método. Lanza {@link PaymentValidationException} (HTTP 400)
+     * ante lista vacía, métodos duplicados, montos no positivos, suma menor al
+     * total o excedente proveniente de un método distinto de EFECTIVO (el vuelto
+     * solo puede salir del efectivo).
+     */
+    private PaymentTotals validatePayments(List<PaymentEntryRequest> payments, BigDecimal orderTotal) {
+        if (payments == null || payments.isEmpty()) {
+            throw new PaymentValidationException("At least one payment is required");
+        }
+
+        Set<PaymentMethod> seenMethods = EnumSet.noneOf(PaymentMethod.class);
+        BigDecimal sum = BigDecimal.ZERO;
+        BigDecimal nonCashSum = BigDecimal.ZERO;
+
+        for (PaymentEntryRequest entry : payments) {
+            if (entry.method() == null) {
+                throw new PaymentValidationException("Payment method is required");
+            }
+            if (!seenMethods.add(entry.method())) {
+                throw new PaymentValidationException("Duplicate payment method: " + entry.method());
+            }
+            if (entry.amount() == null || entry.amount().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new PaymentValidationException("Payment amount must be greater than zero");
+            }
+            sum = sum.add(entry.amount());
+            if (entry.method() != PaymentMethod.EFECTIVO) {
+                nonCashSum = nonCashSum.add(entry.amount());
+            }
+        }
+
+        if (sum.compareTo(orderTotal) < 0) {
+            throw new PaymentValidationException("Payments total cannot be less than order total");
+        }
+        if (nonCashSum.compareTo(orderTotal) > 0) {
+            throw new PaymentValidationException("Non-cash payments cannot exceed order total");
+        }
+
+        String summaryMethod = seenMethods.size() == 1 ? seenMethods.iterator().next().name() : "MIXTO";
+        return new PaymentTotals(sum, summaryMethod);
+    }
+
+    private String normalizeReference(String reference) {
+        if (reference == null) {
+            return null;
+        }
+        String trimmed = reference.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private record PaymentTotals(BigDecimal sum, String summaryMethod) {
+    }
+
     private String buildInvoiceNumber(Long organizationId, Long orderId, LocalDateTime paidAt) {
         return "INV-" + organizationId + "-" + orderId + "-" + paidAt.format(INVOICE_DATE_FORMAT);
     }
 
     private InvoiceResponse mapToResponse(Invoice invoice) {
+        List<PaymentEntryResponse> payments = invoice.getPayments().stream()
+                .map(payment -> new PaymentEntryResponse(
+                        payment.getMethod(),
+                        payment.getAmount(),
+                        payment.getReference()))
+                .collect(Collectors.toList());
         return new InvoiceResponse(
                 invoice.getId(),
                 invoice.getInvoiceNumber(),
@@ -137,6 +211,7 @@ public class InvoiceService {
                 invoice.getPaidAt(),
                 invoice.getCashier() != null ? invoice.getCashier().getId() : null,
                 invoice.getCashierEmail(),
-                invoice.getNotes());
+                invoice.getNotes(),
+                payments);
     }
 }
