@@ -32,7 +32,7 @@ public class ProductController {
     }
 
     @PostMapping
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<ProductResponse> createProduct(@Valid @RequestBody ProductRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return new ResponseEntity<>(productService.createProduct(request, orgId), HttpStatus.CREATED);
@@ -53,14 +53,14 @@ public class ProductController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<ProductResponse> updateProduct(@PathVariable Long id, @Valid @RequestBody ProductRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(productService.updateProduct(id, request, orgId));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<Void> deleteProduct(@PathVariable Long id, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         productService.deleteProduct(id, orgId);

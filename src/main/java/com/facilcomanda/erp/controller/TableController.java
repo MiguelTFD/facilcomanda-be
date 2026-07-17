@@ -32,7 +32,7 @@ public class TableController {
     }
 
     @PostMapping
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<TableResponse> createTable(@Valid @RequestBody TableRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return new ResponseEntity<>(tableService.createTable(request, orgId), HttpStatus.CREATED);
@@ -53,14 +53,14 @@ public class TableController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<TableResponse> updateTable(@PathVariable Long id, @Valid @RequestBody TableRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(tableService.updateTable(id, request, orgId));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<Void> deleteTable(@PathVariable Long id, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         tableService.deleteTable(id, orgId);

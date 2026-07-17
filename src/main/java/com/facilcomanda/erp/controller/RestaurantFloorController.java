@@ -32,7 +32,7 @@ public class RestaurantFloorController {
     }
 
     @PostMapping
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<RestaurantFloorResponse> createFloor(@Valid @RequestBody RestaurantFloorRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return new ResponseEntity<>(restaurantFloorService.createFloor(request, orgId), HttpStatus.CREATED);
@@ -53,14 +53,14 @@ public class RestaurantFloorController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<RestaurantFloorResponse> updateFloor(@PathVariable Long id, @Valid @RequestBody RestaurantFloorRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(restaurantFloorService.updateFloor(id, request, orgId));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<Void> deleteFloor(@PathVariable Long id, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         restaurantFloorService.deleteFloor(id, orgId);
