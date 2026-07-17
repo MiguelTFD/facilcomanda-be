@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 class InvoiceControllerAuthorizationTest {
 
     private static final String VALID_PAYMENT_BODY =
-            "{\"amountPaid\": 50.00, \"paymentMethod\": \"EFECTIVO\"}";
+            "{\"payments\": [{\"method\": \"EFECTIVO\", \"amount\": 50.00}]}";
 
     @Autowired
     private MockMvc mockMvc;
