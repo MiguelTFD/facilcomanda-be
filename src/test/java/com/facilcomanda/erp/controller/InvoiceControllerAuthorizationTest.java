@@ -19,10 +19,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
- * Autorización por rol de /api/invoices (feature 001): cobrar es exclusivo de
- * CAJERO (criterio 3: ADMIN recibe 403; SUPERADMIN también, hereda de ADMIN
- * que nunca cobra); historial de facturas solo ADMIN/SUPERADMIN (criterio 2:
- * MESERO recibe 403 en GET /api/invoices).
+ * Autorización por rol de /api/invoices: cobrar sigue siendo exclusivo de
+ * CAJERO (criterio 3, intacto: ADMIN y SUPERADMIN reciben 403 al cobrar);
+ * historial de facturas para ADMIN/SUPERADMIN y, desde la feature 021 (roles.md
+ * decisión 5), también CAJERO. MESERO/COCINERO reciben 403 en los GET.
  */
 @WebMvcTest(InvoiceController.class)
 @Import({SecurityConfig.class, AuthTestSupport.SecurityFilterStubs.class})
@@ -45,19 +45,19 @@ class InvoiceControllerAuthorizationTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,403", "ADMIN,200", "SUPERADMIN,200"})
+    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,200", "ADMIN,200", "SUPERADMIN,200"})
     void getInvoices(RoleName role, int expectedStatus) throws Exception {
         assertAccess(mockMvc.perform(get("/api/invoices").with(as(role))), expectedStatus);
     }
 
     @ParameterizedTest
-    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,403", "ADMIN,200", "SUPERADMIN,200"})
+    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,200", "ADMIN,200", "SUPERADMIN,200"})
     void getInvoiceById(RoleName role, int expectedStatus) throws Exception {
         assertAccess(mockMvc.perform(get("/api/invoices/1").with(as(role))), expectedStatus);
     }
 
     @ParameterizedTest
-    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,403", "ADMIN,200", "SUPERADMIN,200"})
+    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,200", "ADMIN,200", "SUPERADMIN,200"})
     void getInvoiceByOrderId(RoleName role, int expectedStatus) throws Exception {
         assertAccess(mockMvc.perform(get("/api/invoices/orders/1").with(as(role))), expectedStatus);
     }
