@@ -2,6 +2,7 @@ package com.facilcomanda.erp.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record InvoiceResponse(
         Long id,
@@ -17,5 +18,6 @@ public record InvoiceResponse(
         LocalDateTime paidAt,
         Long cashierUserId,
         String cashierEmail,
-        String notes) {
+        String notes,
+        List<PaymentEntryResponse> payments) {
 }
