@@ -1,5 +1,6 @@
 package com.facilcomanda.erp.model;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -9,11 +10,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import org.hibernate.annotations.Filter;
 
 @Entity
@@ -73,6 +77,9 @@ public class Invoice {
 
     @Column(name = "notes")
     private String notes;
+
+    @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<InvoicePayment> payments = new ArrayList<>();
 
     public Long getId() {
         return id;
@@ -192,5 +199,18 @@ public class Invoice {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public List<InvoicePayment> getPayments() {
+        return payments;
+    }
+
+    public void setPayments(List<InvoicePayment> payments) {
+        this.payments = payments;
+    }
+
+    public void addPayment(InvoicePayment payment) {
+        payment.setInvoice(this);
+        this.payments.add(payment);
     }
 }
