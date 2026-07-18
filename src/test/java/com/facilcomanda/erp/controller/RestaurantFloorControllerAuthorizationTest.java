@@ -21,9 +21,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 /**
- * Autorización por rol de /api/restaurant-floors (feature 001): lectura para
- * los cinco roles (CAJERO incluido: la vista de caja carga los pisos,
- * criterio 4); escritura solo ADMIN/SUPERADMIN.
+ * Autorización por rol de /api/restaurant-floors: lectura para los cinco roles
+ * (CAJERO incluido desde la feature 001: la vista de caja carga los pisos);
+ * escritura ADMIN/SUPERADMIN y, desde la feature 021 (roles.md decisión 5),
+ * también CAJERO (gestión operativa).
  */
 @WebMvcTest(RestaurantFloorController.class)
 @Import({SecurityConfig.class, AuthTestSupport.SecurityFilterStubs.class})
@@ -50,21 +51,21 @@ class RestaurantFloorControllerAuthorizationTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,403", "ADMIN,201", "SUPERADMIN,201"})
+    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,201", "ADMIN,201", "SUPERADMIN,201"})
     void createFloor(RoleName role, int expectedStatus) throws Exception {
         assertAccess(mockMvc.perform(post("/api/restaurant-floors").with(as(role))
                 .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY)), expectedStatus);
     }
 
     @ParameterizedTest
-    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,403", "ADMIN,200", "SUPERADMIN,200"})
+    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,200", "ADMIN,200", "SUPERADMIN,200"})
     void updateFloor(RoleName role, int expectedStatus) throws Exception {
         assertAccess(mockMvc.perform(put("/api/restaurant-floors/1").with(as(role))
                 .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY)), expectedStatus);
     }
 
     @ParameterizedTest
-    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,403", "ADMIN,204", "SUPERADMIN,204"})
+    @CsvSource({"MESERO,403", "COCINERO,403", "CAJERO,204", "ADMIN,204", "SUPERADMIN,204"})
     void deleteFloor(RoleName role, int expectedStatus) throws Exception {
         assertAccess(mockMvc.perform(delete("/api/restaurant-floors/1").with(as(role))), expectedStatus);
     }

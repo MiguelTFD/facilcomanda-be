@@ -16,7 +16,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/roles")
-@PreAuthorize(AuthorizationRules.IS_ADMIN)
+@PreAuthorize(AuthorizationRules.MANAGEMENT)
 public class RoleController {
 
     private final RoleService roleService;

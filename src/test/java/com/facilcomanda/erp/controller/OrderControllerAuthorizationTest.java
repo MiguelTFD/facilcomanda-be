@@ -21,10 +21,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 /**
- * Autorización por rol de /api/orders (feature 001): crear/modificar comanda
- * solo MESERO; órdenes activas para MESERO/COCINERO/ADMIN/SUPERADMIN;
- * pendientes de pago solo CAJERO (criterio 3: ADMIN recibe 403); cambio de
- * estado solo COCINERO/ADMIN/SUPERADMIN.
+ * Autorización por rol de /api/orders: crear/modificar comanda solo MESERO;
+ * órdenes activas para MESERO/COCINERO/ADMIN/SUPERADMIN y, desde la feature 021
+ * (roles.md decisión 5, STAFF_READ suma CAJERO), también CAJERO (las vistas de
+ * gestión de caja listan órdenes); pendientes de pago solo CAJERO (criterio 3:
+ * ADMIN recibe 403); cambio de estado solo COCINERO/ADMIN/SUPERADMIN.
  */
 @WebMvcTest(OrderController.class)
 @Import({SecurityConfig.class, AuthTestSupport.SecurityFilterStubs.class})
@@ -57,7 +58,7 @@ class OrderControllerAuthorizationTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"MESERO,200", "COCINERO,200", "CAJERO,403", "ADMIN,200", "SUPERADMIN,200"})
+    @CsvSource({"MESERO,200", "COCINERO,200", "CAJERO,200", "ADMIN,200", "SUPERADMIN,200"})
     void getActiveOrders(RoleName role, int expectedStatus) throws Exception {
         assertAccess(mockMvc.perform(get("/api/orders").with(as(role))), expectedStatus);
     }

@@ -46,21 +46,21 @@ public class InvoiceController {
     }
 
     @GetMapping
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<List<InvoiceResponse>> getInvoices(Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(invoiceService.getInvoices(orgId));
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<InvoiceResponse> getInvoiceById(@PathVariable Long id, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(invoiceService.getInvoiceById(id, orgId));
     }
 
     @GetMapping("/orders/{orderId}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<InvoiceResponse> getInvoiceByOrderId(@PathVariable Long orderId,
             Authentication authentication) {
         Long orgId = getOrganizationId(authentication);

@@ -32,7 +32,7 @@ public class CategoryController {
     }
 
     @PostMapping
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<CategoryResponse> createCategory(@Valid @RequestBody CategoryRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return new ResponseEntity<>(categoryService.createCategory(request, orgId), HttpStatus.CREATED);
@@ -53,14 +53,14 @@ public class CategoryController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<CategoryResponse> updateCategory(@PathVariable Long id, @Valid @RequestBody CategoryRequest request, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         return ResponseEntity.ok(categoryService.updateCategory(id, request, orgId));
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize(AuthorizationRules.IS_ADMIN)
+    @PreAuthorize(AuthorizationRules.MANAGEMENT)
     public ResponseEntity<Void> deleteCategory(@PathVariable Long id, Authentication authentication) {
         Long orgId = getOrganizationId(authentication);
         categoryService.deleteCategory(id, orgId);
