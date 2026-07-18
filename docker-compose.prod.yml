@@ -1,0 +1,40 @@
+# Despliegue en VPS: backend + PostgreSQL propio.
+# Uso: docker compose -f docker-compose.prod.yml up -d --build
+# Requiere un archivo .env junto a este archivo (ver .env.example).
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: facilcomanda-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    container_name: facilcomanda-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 8080
+      # Dentro de la red de Docker la BD se llama "db"; pisa cualquier DB_HOST del .env
+      DB_HOST: db
+      DB_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Solo accesible desde el propio VPS (127.0.0.1). Nginx hace de proxy hacia afuera.
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  pgdata:
