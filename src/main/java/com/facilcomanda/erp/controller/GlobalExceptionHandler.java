@@ -12,6 +12,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import com.facilcomanda.erp.exception.ExpenseNotFoundException;
+import com.facilcomanda.erp.exception.ExpenseValidationException;
 import com.facilcomanda.erp.exception.PaymentValidationException;
 import jakarta.validation.ConstraintViolationException;
 import java.util.HashMap;
@@ -80,6 +82,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handlePaymentValidationException(PaymentValidationException ex) {
         logger.warn("Payment validation error: {}", ex.getMessage());
         return buildErrorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ExpenseValidationException.class)
+    public ResponseEntity<Map<String, String>> handleExpenseValidationException(ExpenseValidationException ex) {
+        logger.warn("Expense validation error: {}", ex.getMessage());
+        return buildErrorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(ExpenseNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleExpenseNotFoundException(ExpenseNotFoundException ex) {
+        logger.warn("Expense not found: {}", ex.getMessage());
+        return buildErrorResponse(ex.getMessage(), HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(RuntimeException.class)
