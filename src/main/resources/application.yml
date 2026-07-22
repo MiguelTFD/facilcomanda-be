@@ -8,12 +8,19 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update 
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    # La BD productiva ya existe (creada por Hibernate): Flyway la marca como baseline en
+    # la versión 1 (V1__baseline no se ejecuta allí) y solo aplica V2 en adelante.
+    # En una BD nueva y vacía Flyway ejecuta V1 + V2 desde cero.
+    baseline-on-migrate: true
+    baseline-version: 1
 
 server:
   port: ${PORT:8080}
