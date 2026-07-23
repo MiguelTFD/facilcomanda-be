@@ -1,6 +1,7 @@
 package com.facilcomanda.erp.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public record OrderItemResponse(
     Long id,
@@ -8,5 +9,7 @@ public record OrderItemResponse(
     String productName,
     Integer quantity,
     BigDecimal subtotal,
-    String comments
+    String comments,
+    LocalDateTime createdAt,
+    Integer roundNumber
 ) {}

@@ -11,6 +11,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Column;
 import org.hibernate.annotations.Filter;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "order_items", indexes = @Index(name = "idx_order_item_org", columnList = "organization_id"))
@@ -35,6 +36,21 @@ public class OrderItem {
     private Integer quantity;
     private BigDecimal subtotal;
     private String comments;
+
+    /**
+     * Momento en que se solicitó esta línea (feature 025). La ronda 1 hereda la
+     * fecha de la orden; cada ronda posterior fija su propio instante.
+     */
+    @Column(name = "created_at", nullable = false)
+    private LocalDateTime createdAt;
+
+    /**
+     * Ronda de pedido a la que pertenece la línea (feature 025), 1-based. La ronda 1
+     * son los ítems creados con la orden; cada edición que agrega cantidad neta genera
+     * la ronda siguiente.
+     */
+    @Column(name = "round_number", nullable = false)
+    private Integer roundNumber;
 
     public OrderItem() {
     }
@@ -101,5 +117,21 @@ public class OrderItem {
 
     public void setComments(String comments) {
         this.comments = comments;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public Integer getRoundNumber() {
+        return roundNumber;
+    }
+
+    public void setRoundNumber(Integer roundNumber) {
+        this.roundNumber = roundNumber;
     }
 }

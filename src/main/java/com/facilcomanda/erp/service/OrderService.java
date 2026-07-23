@@ -5,6 +5,7 @@ import com.facilcomanda.erp.dto.OrderItemResponse;
 import com.facilcomanda.erp.dto.OrderRequest;
 import com.facilcomanda.erp.dto.OrderResponse;
 import com.facilcomanda.erp.dto.OrderStatusRequest;
+import com.facilcomanda.erp.exception.OrderReductionNotAllowedException;
 import com.facilcomanda.erp.model.Order;
 import com.facilcomanda.erp.model.OrderItem;
 import com.facilcomanda.erp.model.Product;
@@ -21,12 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 public class OrderService {
-    private static final String MODIFIED_ORDER_MARKER = "MODIFIED";
 
     private final OrderRepository orderRepository;
     private final RestaurantTableRepository restaurantTableRepository;
@@ -87,6 +89,9 @@ public class OrderService {
             orderItem.setProduct(product);
             orderItem.setQuantity(itemRequest.quantity());
             orderItem.setComments(itemRequest.comments());
+            // Ronda 1: los ítems creados con la orden (feature 025, D1).
+            orderItem.setRoundNumber(1);
+            orderItem.setCreatedAt(order.getOrderDate());
 
             BigDecimal price = product.getUnitPrice();
             if (product.getDiscount() != null) {
@@ -157,47 +162,87 @@ public class OrderService {
             throw new RuntimeException("Paid or cancelled orders cannot be modified");
         }
 
-        for (OrderItem existingItem : order.getOrderItems()) {
-            Product product = existingItem.getProduct();
-            product.setStock(product.getStock() + existingItem.getQuantity());
-            productRepository.save(product);
+        // Feature 025: preservar las rondas existentes y solo AGREGAR las líneas nuevas
+        // (el delta) como la ronda siguiente. Nunca se limpian ítems ni se devuelve stock.
+
+        // Totales ya persistidos por producto (sumando todas las rondas) y ronda máxima actual.
+        Map<Long, Integer> persistedByProduct = new LinkedHashMap<>();
+        int currentMaxRound = 0;
+        for (OrderItem existing : order.getOrderItems()) {
+            persistedByProduct.merge(existing.getProduct().getId(), existing.getQuantity(), Integer::sum);
+            if (existing.getRoundNumber() != null) {
+                currentMaxRound = Math.max(currentMaxRound, existing.getRoundNumber());
+            }
         }
 
-        order.getOrderItems().clear();
-        BigDecimal total = BigDecimal.ZERO;
-
+        // Totales entrantes por producto (el modal envía el total acumulado por producto).
+        Map<Long, Integer> incomingByProduct = new LinkedHashMap<>();
+        Map<Long, String> commentsByProduct = new LinkedHashMap<>();
         for (OrderItemRequest itemRequest : request.items()) {
-            Product product = productRepository.findByIdAndOrganizationId(itemRequest.productId(), organizationId)
-                    .orElseThrow(() -> new RuntimeException(
-                            "Product ID " + itemRequest.productId() + " not found or unauthorized"));
+            incomingByProduct.merge(itemRequest.productId(), itemRequest.quantity(), Integer::sum);
+            commentsByProduct.put(itemRequest.productId(), itemRequest.comments());
+        }
 
-            if (product.getStock() < itemRequest.quantity()) {
+        // D3: no se permite bajar la cantidad total por producto por debajo de lo ya enviado
+        // (omitir un producto ya enviado equivale a bajarlo a 0). Validación antes de mutar.
+        for (Map.Entry<Long, Integer> persisted : persistedByProduct.entrySet()) {
+            int incoming = incomingByProduct.getOrDefault(persisted.getKey(), 0);
+            if (incoming < persisted.getValue()) {
+                throw new OrderReductionNotAllowedException(
+                        "Cannot reduce quantity already sent to the kitchen for product ID " + persisted.getKey());
+            }
+        }
+
+        // Resolver deltas positivos y validar stock antes de aplicar (rechazo atómico).
+        Map<Long, Product> productsByDelta = new LinkedHashMap<>();
+        Map<Long, Integer> deltaByProduct = new LinkedHashMap<>();
+        for (Map.Entry<Long, Integer> incoming : incomingByProduct.entrySet()) {
+            int delta = incoming.getValue() - persistedByProduct.getOrDefault(incoming.getKey(), 0);
+            if (delta <= 0) {
+                continue;
+            }
+            Product product = productRepository.findByIdAndOrganizationId(incoming.getKey(), organizationId)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Product ID " + incoming.getKey() + " not found or unauthorized"));
+            if (product.getStock() < delta) {
                 throw new RuntimeException("Insufficient stock for product: " + product.getName());
             }
+            productsByDelta.put(incoming.getKey(), product);
+            deltaByProduct.put(incoming.getKey(), delta);
+        }
 
-            product.setStock(product.getStock() - itemRequest.quantity());
+        // Aplicar: descontar solo el delta y agregar las líneas de la ronda nueva.
+        int newRound = currentMaxRound + 1;
+        LocalDateTime now = LocalDateTime.now();
+        for (Map.Entry<Long, Integer> entry : deltaByProduct.entrySet()) {
+            Product product = productsByDelta.get(entry.getKey());
+            int delta = entry.getValue();
+
+            product.setStock(product.getStock() - delta);
             productRepository.save(product);
 
             OrderItem orderItem = new OrderItem();
             orderItem.setOrganizationId(organizationId);
             orderItem.setProduct(product);
-            orderItem.setQuantity(itemRequest.quantity());
-            orderItem.setComments(itemRequest.comments());
+            orderItem.setQuantity(delta);
+            orderItem.setComments(commentsByProduct.get(entry.getKey()));
+            orderItem.setRoundNumber(newRound);
+            orderItem.setCreatedAt(now);
 
             BigDecimal price = product.getUnitPrice();
             if (product.getDiscount() != null) {
                 price = price.subtract(product.getDiscount());
             }
-
-            BigDecimal subtotal = price.multiply(BigDecimal.valueOf(itemRequest.quantity()));
-            orderItem.setSubtotal(subtotal);
+            orderItem.setSubtotal(price.multiply(BigDecimal.valueOf(delta)));
 
             order.addOrderItem(orderItem);
-            total = total.add(subtotal);
         }
 
+        // Total = suma de subtotales de todas las rondas.
+        BigDecimal total = order.getOrderItems().stream()
+                .map(OrderItem::getSubtotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         order.setTotal(total);
-        order.setComments(MODIFIED_ORDER_MARKER);
 
         return mapToResponse(orderRepository.save(order));
     }
@@ -209,7 +254,13 @@ public class OrderService {
                 item.getProduct().getName(),
                 item.getQuantity(),
                 item.getSubtotal(),
-                item.getComments())).collect(Collectors.toList());
+                item.getComments(),
+                item.getCreatedAt(),
+                item.getRoundNumber())).collect(Collectors.toList());
+
+        // modified derivada de los datos (D4): existe alguna línea en una ronda > 1.
+        boolean modified = order.getOrderItems().stream()
+                .anyMatch(item -> item.getRoundNumber() != null && item.getRoundNumber() > 1);
 
         return new OrderResponse(
                 order.getId(),
@@ -221,6 +272,6 @@ public class OrderService {
                 order.getTotal(),
                 order.getOrderDate(),
                 itemResponses,
-                MODIFIED_ORDER_MARKER.equals(order.getComments()));
+                modified);
     }
 }

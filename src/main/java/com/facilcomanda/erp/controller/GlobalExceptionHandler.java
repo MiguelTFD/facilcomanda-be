@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import com.facilcomanda.erp.exception.ExpenseNotFoundException;
 import com.facilcomanda.erp.exception.ExpenseValidationException;
+import com.facilcomanda.erp.exception.OrderReductionNotAllowedException;
 import com.facilcomanda.erp.exception.PaymentValidationException;
 import jakarta.validation.ConstraintViolationException;
 import java.util.HashMap;
@@ -81,6 +82,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PaymentValidationException.class)
     public ResponseEntity<Map<String, String>> handlePaymentValidationException(PaymentValidationException ex) {
         logger.warn("Payment validation error: {}", ex.getMessage());
+        return buildErrorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(OrderReductionNotAllowedException.class)
+    public ResponseEntity<Map<String, String>> handleOrderReductionNotAllowedException(OrderReductionNotAllowedException ex) {
+        logger.warn("Order reduction not allowed: {}", ex.getMessage());
         return buildErrorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST);
     }
 
