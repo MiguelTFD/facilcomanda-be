@@ -22,6 +22,7 @@ import java.util.List;
 import static com.facilcomanda.erp.security.AuthTestSupport.as;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -53,7 +54,7 @@ class OrderContractSerializationTest {
                 new BigDecimal("30.00"), null, LocalDateTime.parse("2026-07-01T12:20:00"), 2);
         OrderResponse response = new OrderResponse(100L, 1L, "Mesa 1", "Piso 1", "MESA",
                 OrderStatus.PENDING, new BigDecimal("60.00"), LocalDateTime.parse("2026-07-01T12:00:00"),
-                List.of(round1, round2), true);
+                List.of(round1, round2), true, false, null);
         when(orderService.createOrder(any(), any(), any())).thenReturn(response);
 
         mockMvc.perform(post("/api/orders").with(as(RoleName.MESERO))
@@ -64,5 +65,26 @@ class OrderContractSerializationTest {
                 .andExpect(jsonPath("$.items[0].createdAt").exists())
                 .andExpect(jsonPath("$.items[1].roundNumber").value(2))
                 .andExpect(jsonPath("$.items[1].createdAt").exists());
+    }
+
+    /**
+     * Feature 027 (CA2/CA6) — la orden expone {@code attended} (derivada de
+     * {@code status == DELIVERED}) y {@code attendedAt} (momento del último
+     * atendido, que la cocina usa para saber qué rondas son nuevas).
+     */
+    @Test
+    void markAttended_respuestaIncluyeAttendedYAttendedAt() throws Exception {
+        OrderItemResponse round1 = new OrderItemResponse(10L, 1L, "Coca Cola", 2,
+                new BigDecimal("30.00"), null, LocalDateTime.parse("2026-07-01T12:00:00"), 1);
+        OrderResponse response = new OrderResponse(100L, 1L, "Mesa 1", "Piso 1", "MESA",
+                OrderStatus.DELIVERED, new BigDecimal("30.00"), LocalDateTime.parse("2026-07-01T12:00:00"),
+                List.of(round1), false, true, LocalDateTime.parse("2026-07-01T12:30:00"));
+        when(orderService.markAttended(any(), any())).thenReturn(response);
+
+        mockMvc.perform(patch("/api/orders/100/attended").with(as(RoleName.MESERO)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DELIVERED"))
+                .andExpect(jsonPath("$.attended").value(true))
+                .andExpect(jsonPath("$.attendedAt").exists());
     }
 }

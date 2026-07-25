@@ -3,6 +3,7 @@ package com.facilcomanda.erp.service;
 import com.facilcomanda.erp.dto.OrderItemRequest;
 import com.facilcomanda.erp.dto.OrderRequest;
 import com.facilcomanda.erp.dto.OrderResponse;
+import com.facilcomanda.erp.exception.OrderNotAttendableException;
 import com.facilcomanda.erp.exception.OrderReductionNotAllowedException;
 import com.facilcomanda.erp.model.Order;
 import com.facilcomanda.erp.model.OrderItem;
@@ -219,5 +220,139 @@ class OrderServiceTest {
         assertThat(order.getOrderItems().get(0).getRoundNumber()).isEqualTo(1);
         assertThat(response.modified()).isFalse();
         assertThat(coca.getStock()).isEqualTo(10);
+    }
+
+    // ================= Feature 027 — comanda atendida por el MESERO =================
+    // CA2: marcar atendido; CA5/CA7: reactivación solo con delta; CA9: estados no
+    // atendibles; CA10: aislamiento multi-tenant. Ver spec/features/027-*.
+
+    private Order orderInStatus(OrderStatus status) {
+        Order order = pendingOrderWith(existingItem(coca, 2, 1, LocalDateTime.now().minusMinutes(10)));
+        order.setStatus(status);
+        return order;
+    }
+
+    // ---------- CA2: marcar atendida ----------
+
+    @Test
+    void markAttended_poneStatusDeliveredYSellaAttendedAt() {
+        Order order = orderInStatus(OrderStatus.PENDING);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OrderResponse response = orderService.markAttended(ORDER_ID, ORG_ID);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(order.getAttendedAt()).isNotNull();
+        assertThat(response.attended()).isTrue();
+        assertThat(response.attendedAt()).isEqualTo(order.getAttendedAt());
+    }
+
+    @Test
+    void markAttended_ordenYaAtendida_esIdempotenteYNoMueveAttendedAt() {
+        LocalDateTime sello = LocalDateTime.now().minusMinutes(5);
+        Order order = orderInStatus(OrderStatus.DELIVERED);
+        order.setAttendedAt(sello);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+
+        OrderResponse response = orderService.markAttended(ORDER_ID, ORG_ID);
+
+        assertThat(order.getAttendedAt()).isEqualTo(sello);
+        assertThat(response.attended()).isTrue();
+        verify(orderRepository, never()).save(any());
+    }
+
+    // ---------- CA9: estados no atendibles ----------
+
+    @Test
+    void markAttended_ordenPagada_lanzaExcepcionDeDominioSinEfectos() {
+        Order order = orderInStatus(OrderStatus.PAID);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.markAttended(ORDER_ID, ORG_ID))
+                .isInstanceOf(OrderNotAttendableException.class);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getAttendedAt()).isNull();
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void markAttended_ordenCancelada_lanzaExcepcionDeDominioSinEfectos() {
+        Order order = orderInStatus(OrderStatus.CANCELLED);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.markAttended(ORDER_ID, ORG_ID))
+                .isInstanceOf(OrderNotAttendableException.class);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(order.getAttendedAt()).isNull();
+        verify(orderRepository, never()).save(any());
+    }
+
+    // ---------- CA10: aislamiento multi-tenant ----------
+
+    @Test
+    void markAttended_ordenDeOtraOrganizacion_noSeEncuentraNiSeModifica() {
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.markAttended(ORDER_ID, ORG_ID))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(orderRepository, never()).save(any());
+    }
+
+    // ---------- CA5: una ronda nueva reactiva la comanda ----------
+
+    @Test
+    void updateOrder_conDeltaSobreOrdenAtendida_vuelveAPendingYConservaAttendedAt() {
+        LocalDateTime sello = LocalDateTime.now().minusMinutes(5);
+        Order order = orderInStatus(OrderStatus.DELIVERED);
+        order.setAttendedAt(sello);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(productRepository.findByIdAndOrganizationId(1L, ORG_ID)).thenReturn(Optional.of(coca));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OrderResponse response = orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 3, null))), ORG_ID);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(order.getAttendedAt()).isEqualTo(sello);
+        assertThat(response.attended()).isFalse();
+        assertThat(response.attendedAt()).isEqualTo(sello);
+        assertThat(response.modified()).isTrue();
+    }
+
+    // ---------- CA7: editar sin agregar nada NO reactiva ----------
+
+    @Test
+    void updateOrder_sinDeltaSobreOrdenAtendida_siguePendienteDeCobroPeroAtendida() {
+        LocalDateTime sello = LocalDateTime.now().minusMinutes(5);
+        Order order = orderInStatus(OrderStatus.DELIVERED);
+        order.setAttendedAt(sello);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OrderResponse response = orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 2, null))), ORG_ID);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(order.getAttendedAt()).isEqualTo(sello);
+        assertThat(response.attended()).isTrue();
+    }
+
+    // ---------- contrato: attended derivada del estado ----------
+
+    @Test
+    void mapToResponse_ordenPendiente_exponeAttendedFalseYAttendedAtNulo() {
+        Order order = orderInStatus(OrderStatus.PENDING);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OrderResponse response = orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 2, null))), ORG_ID);
+
+        assertThat(response.attended()).isFalse();
+        assertThat(response.attendedAt()).isNull();
     }
 }
