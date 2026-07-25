@@ -39,6 +39,15 @@ public class Order {
     private LocalDateTime orderDate;
     private String type;
     private String comments;
+
+    /**
+     * Momento del último "ATENDIDO" marcado por el MESERO (feature 027). Nulo mientras
+     * la comanda nunca se haya atendido. No se limpia cuando la orden vuelve a
+     * {@link OrderStatus#PENDING} por una ronda nueva: es la referencia que permite
+     * distinguir en cocina qué rondas llegaron después del último atendido.
+     */
+    @Column(name = "attended_at")
+    private LocalDateTime attendedAt;
     
     @Column(name = "idempotency_key")
     private String idempotencyKey;
@@ -123,6 +132,14 @@ public class Order {
 
     public void setIdempotencyKey(String idempotencyKey) {
         this.idempotencyKey = idempotencyKey;
+    }
+
+    public LocalDateTime getAttendedAt() {
+        return attendedAt;
+    }
+
+    public void setAttendedAt(LocalDateTime attendedAt) {
+        this.attendedAt = attendedAt;
     }
 
     public OrderStatus getStatus() {
