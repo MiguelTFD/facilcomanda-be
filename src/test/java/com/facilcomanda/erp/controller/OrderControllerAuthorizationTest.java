@@ -76,4 +76,15 @@ class OrderControllerAuthorizationTest {
         assertAccess(mockMvc.perform(patch("/api/orders/1/status").with(as(role))
                 .contentType(MediaType.APPLICATION_JSON).content(VALID_STATUS_BODY)), expectedStatus);
     }
+
+    /**
+     * Feature 027 (CA9) — marcar comanda atendida es exclusivo del MESERO
+     * ({@code roles.md} decisión 6). Endpoint dedicado y sin cuerpo: no amplía
+     * {@code KITCHEN_STATUS}, que seguiría permitiendo PREPARING/READY/CANCELLED.
+     */
+    @ParameterizedTest
+    @CsvSource({"MESERO,200", "COCINERO,403", "CAJERO,403", "ADMIN,403", "SUPERADMIN,403"})
+    void markOrderAttended(RoleName role, int expectedStatus) throws Exception {
+        assertAccess(mockMvc.perform(patch("/api/orders/1/attended").with(as(role))), expectedStatus);
+    }
 }
