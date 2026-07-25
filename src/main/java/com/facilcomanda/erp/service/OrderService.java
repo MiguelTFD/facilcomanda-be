@@ -5,6 +5,7 @@ import com.facilcomanda.erp.dto.OrderItemResponse;
 import com.facilcomanda.erp.dto.OrderRequest;
 import com.facilcomanda.erp.dto.OrderResponse;
 import com.facilcomanda.erp.dto.OrderStatusRequest;
+import com.facilcomanda.erp.exception.OrderNotAttendableException;
 import com.facilcomanda.erp.exception.OrderReductionNotAllowedException;
 import com.facilcomanda.erp.model.Order;
 import com.facilcomanda.erp.model.OrderItem;
@@ -153,6 +154,36 @@ public class OrderService {
         return mapToResponse(orderRepository.save(order));
     }
 
+    /**
+     * Feature 027: marca la comanda como atendida por el MESERO. "Atendida" se
+     * persiste como {@link OrderStatus#DELIVERED} ({@code roles.md} decisión 6), de
+     * modo que la orden sigue siendo visible y cobrable para el CAJERO; lo único que
+     * cambia es que deja de mostrarse en la pantalla de cocina.
+     *
+     * <p>Idempotente: si la orden ya estaba atendida se devuelve tal cual, sin mover
+     * {@code attendedAt} — ese sello es la referencia para saber qué rondas de pedido
+     * llegaron después del último atendido.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public OrderResponse markAttended(Long id, Long organizationId) {
+        Order order = orderRepository.findByIdAndOrganizationId(id, organizationId)
+                .orElseThrow(() -> new RuntimeException("Order not found or unauthorized"));
+
+        if (order.getStatus() == OrderStatus.PAID || order.getStatus() == OrderStatus.CANCELLED) {
+            throw new OrderNotAttendableException(
+                    "Paid or cancelled orders cannot be marked as attended");
+        }
+
+        if (order.getStatus() == OrderStatus.DELIVERED) {
+            return mapToResponse(order);
+        }
+
+        order.setStatus(OrderStatus.DELIVERED);
+        order.setAttendedAt(LocalDateTime.now());
+
+        return mapToResponse(orderRepository.save(order));
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public OrderResponse updateOrder(Long id, OrderRequest request, Long organizationId) {
         Order order = orderRepository.findByIdAndOrganizationId(id, organizationId)
@@ -238,6 +269,14 @@ public class OrderService {
             order.addOrderItem(orderItem);
         }
 
+        // Feature 027: una ronda nueva reactiva la comanda para la cocina. Se condiciona
+        // a que realmente se haya agregado algo: confirmar la edición sin cambios (delta 0)
+        // NO debe sacar del estado atendido. `attendedAt` se conserva a propósito, porque
+        // es lo que permite distinguir en cocina las rondas nuevas de las ya servidas.
+        if (!deltaByProduct.isEmpty() && order.getStatus() == OrderStatus.DELIVERED) {
+            order.setStatus(OrderStatus.PENDING);
+        }
+
         // Total = suma de subtotales de todas las rondas.
         BigDecimal total = order.getOrderItems().stream()
                 .map(OrderItem::getSubtotal)
@@ -272,6 +311,8 @@ public class OrderService {
                 order.getTotal(),
                 order.getOrderDate(),
                 itemResponses,
-                modified);
+                modified,
+                order.getStatus() == OrderStatus.DELIVERED,
+                order.getAttendedAt());
     }
 }

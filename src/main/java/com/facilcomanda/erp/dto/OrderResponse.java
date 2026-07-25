@@ -15,5 +15,9 @@ public record OrderResponse(
     BigDecimal total,
     LocalDateTime orderDate,
     List<OrderItemResponse> items,
-    Boolean modified
+    Boolean modified,
+    /** Feature 027: la comanda ya fue marcada como atendida por el MESERO ({@code status == DELIVERED}). */
+    Boolean attended,
+    /** Feature 027: momento del último atendido; nulo si nunca se atendió. Referencia para detectar rondas nuevas en cocina. */
+    LocalDateTime attendedAt
 ) {}

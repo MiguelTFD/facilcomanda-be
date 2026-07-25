@@ -64,6 +64,18 @@ public class OrderController {
         return ResponseEntity.ok(orderService.updateOrderStatus(id, request, orgId));
     }
 
+    /**
+     * Feature 027: el MESERO marca la comanda como atendida. Endpoint sin cuerpo —
+     * la única transición posible es a {@code DELIVERED} ({@code roles.md} decisión 6).
+     */
+    @PatchMapping("/{id}/attended")
+    @PreAuthorize(AuthorizationRules.ORDER_ATTEND)
+    public ResponseEntity<OrderResponse> markOrderAttended(@PathVariable Long id,
+            Authentication authentication) {
+        Long orgId = getOrganizationId(authentication);
+        return ResponseEntity.ok(orderService.markAttended(id, orgId));
+    }
+
     @PutMapping("/{id}")
     @PreAuthorize(AuthorizationRules.IS_MESERO)
     public ResponseEntity<OrderResponse> updateOrder(@PathVariable Long id,

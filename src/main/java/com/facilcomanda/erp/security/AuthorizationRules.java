@@ -37,6 +37,15 @@ public final class AuthorizationRules {
     /** Cambio de estado de orden (cocina). */
     public static final String KITCHEN_STATUS = "hasAnyRole('COCINERO','ADMIN','SUPERADMIN')";
 
+    /**
+     * Marcar una comanda como atendida (feature 027, {@code roles.md} decisión 6).
+     * Regla propia y endpoint dedicado en lugar de ampliar {@link #KITCHEN_STATUS}:
+     * esa regla habilitaría además {@code PREPARING}, {@code READY} y
+     * {@code CANCELLED}, mientras que aquí la única transición posible es a
+     * {@code DELIVERED}.
+     */
+    public static final String ORDER_ATTEND = "hasRole('MESERO')";
+
     /** Gestión entre organizaciones. */
     public static final String IS_SUPERADMIN = "hasRole('SUPERADMIN')";
 
