@@ -53,7 +53,8 @@ class InvoiceChargeContractTest {
                 "MIXTO", LocalDateTime.now(), 3L, "cajero@facilcomanda.test", null,
                 List.of(
                         new PaymentEntryResponse(PaymentMethod.EFECTIVO, new BigDecimal("20.00"), null),
-                        new PaymentEntryResponse(PaymentMethod.CREDITO, new BigDecimal("32.00"), "Sr. Pérez")));
+                        new PaymentEntryResponse(PaymentMethod.CREDITO, new BigDecimal("32.00"), "Sr. Pérez")),
+                List.of());
         when(invoiceService.chargeOrder(eq(42L), any(), any(), any())).thenReturn(stub);
 
         String body = "{\"payments\":["

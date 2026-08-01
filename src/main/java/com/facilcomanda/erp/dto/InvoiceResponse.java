@@ -19,5 +19,6 @@ public record InvoiceResponse(
         Long cashierUserId,
         String cashierEmail,
         String notes,
-        List<PaymentEntryResponse> payments) {
+        List<PaymentEntryResponse> payments,
+        List<InvoiceItemResponse> items) {
 }

@@ -1,5 +1,6 @@
 package com.facilcomanda.erp.service;
 
+import com.facilcomanda.erp.dto.InvoiceItemResponse;
 import com.facilcomanda.erp.dto.InvoicePaymentRequest;
 import com.facilcomanda.erp.dto.InvoiceResponse;
 import com.facilcomanda.erp.dto.PaymentEntryRequest;
@@ -7,6 +8,8 @@ import com.facilcomanda.erp.exception.PaymentValidationException;
 import com.facilcomanda.erp.model.Invoice;
 import com.facilcomanda.erp.model.InvoicePayment;
 import com.facilcomanda.erp.model.Order;
+import com.facilcomanda.erp.model.OrderItem;
+import com.facilcomanda.erp.model.Product;
 import com.facilcomanda.erp.model.RestaurantTable;
 import com.facilcomanda.erp.model.User;
 import com.facilcomanda.erp.model.enums.OrderStatus;
@@ -26,6 +29,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -256,5 +260,121 @@ class InvoiceServiceTest {
                 new PaymentEntryRequest(PaymentMethod.YAPE, new BigDecimal("60.00"), null)), null)))
                 .isInstanceOf(PaymentValidationException.class);
         verify(invoiceRepository, never()).save(any());
+    }
+
+    // ---------- Feature 028: líneas de producto en el ticket ----------
+
+    private OrderItem itemOf(Long id, String productName, int quantity, String subtotal, int round, String comments) {
+        Product product = new Product();
+        product.setId(id);
+        product.setName(productName);
+
+        OrderItem item = new OrderItem(ORG_ID, order, product, quantity, new BigDecimal(subtotal));
+        item.setId(id);
+        item.setRoundNumber(round);
+        item.setComments(comments);
+        return item;
+    }
+
+    private Invoice invoiceWithItems(List<OrderItem> items) {
+        order.getOrderItems().clear();
+        order.getOrderItems().addAll(items);
+
+        Invoice invoice = new Invoice();
+        invoice.setId(100L);
+        invoice.setOrganizationId(ORG_ID);
+        invoice.setOrder(order);
+        invoice.setOrderNumber(ORDER_ID);
+        invoice.setInvoiceNumber("INV-7-42-20260801143205");
+        invoice.setOrderTotal(new BigDecimal("55.00"));
+        invoice.setAmountPaid(new BigDecimal("60.00"));
+        invoice.setChangeAmount(new BigDecimal("5.00"));
+        invoice.setPaymentMethod("EFECTIVO");
+        invoice.setPaidAt(LocalDateTime.of(2026, 8, 1, 14, 32));
+        return invoice;
+    }
+
+    @Test
+    void getInvoiceById_mapeaLineasConPrecioUnitarioDerivado() {
+        Invoice invoice = invoiceWithItems(List.of(
+                itemOf(1L, "Lomo saltado", 2, "50.00", 1, null),
+                itemOf(2L, "Chicha morada", 1, "5.00", 1, "sin hielo")));
+        when(invoiceRepository.findByIdAndOrganizationId(100L, ORG_ID)).thenReturn(Optional.of(invoice));
+
+        InvoiceResponse response = invoiceService.getInvoiceById(100L, ORG_ID);
+
+        assertThat(response.items()).hasSize(2);
+        InvoiceItemResponse first = response.items().get(0);
+        assertThat(first.productName()).isEqualTo("Lomo saltado");
+        assertThat(first.quantity()).isEqualTo(2);
+        assertThat(first.unitPrice()).isEqualByComparingTo("25.00");
+        assertThat(first.lineTotal()).isEqualByComparingTo("50.00");
+        assertThat(first.comments()).isNull();
+        assertThat(response.items().get(1).comments()).isEqualTo("sin hielo");
+    }
+
+    @Test
+    void getInvoiceById_ordenaLineasPorRondaYLuegoPorId() {
+        Invoice invoice = invoiceWithItems(List.of(
+                itemOf(9L, "Postre", 1, "10.00", 2, null),
+                itemOf(3L, "Entrada", 1, "8.00", 1, null),
+                itemOf(7L, "Segundo", 1, "20.00", 1, null)));
+        when(invoiceRepository.findByIdAndOrganizationId(100L, ORG_ID)).thenReturn(Optional.of(invoice));
+
+        InvoiceResponse response = invoiceService.getInvoiceById(100L, ORG_ID);
+
+        assertThat(response.items())
+                .extracting(InvoiceItemResponse::productName)
+                .containsExactly("Entrada", "Segundo", "Postre");
+    }
+
+    @Test
+    void getInvoiceById_sumaDeLineasCoincideConElTotalDeLaFactura() {
+        Invoice invoice = invoiceWithItems(List.of(
+                itemOf(1L, "Lomo saltado", 2, "50.00", 1, null),
+                itemOf(2L, "Chicha morada", 1, "5.00", 1, null)));
+        when(invoiceRepository.findByIdAndOrganizationId(100L, ORG_ID)).thenReturn(Optional.of(invoice));
+
+        InvoiceResponse response = invoiceService.getInvoiceById(100L, ORG_ID);
+
+        BigDecimal suma = response.items().stream()
+                .map(InvoiceItemResponse::lineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertThat(suma).isEqualByComparingTo(response.orderTotal());
+    }
+
+    @Test
+    void getInvoiceById_divisionNoExacta_redondeaUnitarioYRespetaElSubtotal() {
+        Invoice invoice = invoiceWithItems(List.of(itemOf(1L, "Menu del dia", 3, "10.00", 1, null)));
+        when(invoiceRepository.findByIdAndOrganizationId(100L, ORG_ID)).thenReturn(Optional.of(invoice));
+
+        InvoiceResponse response = invoiceService.getInvoiceById(100L, ORG_ID);
+
+        assertThat(response.items().get(0).unitPrice()).isEqualByComparingTo("3.33");
+        assertThat(response.items().get(0).lineTotal()).isEqualByComparingTo("10.00");
+    }
+
+    @Test
+    void getInvoiceById_facturaSinLineas_devuelveListaVaciaNoNula() {
+        Invoice invoice = invoiceWithItems(List.of());
+        when(invoiceRepository.findByIdAndOrganizationId(100L, ORG_ID)).thenReturn(Optional.of(invoice));
+
+        InvoiceResponse response = invoiceService.getInvoiceById(100L, ORG_ID);
+
+        assertThat(response.items()).isNotNull().isEmpty();
+    }
+
+    @Test
+    void getInvoiceById_productoBorrado_noRompeElTicket() {
+        OrderItem huerfano = new OrderItem(ORG_ID, order, null, 1, new BigDecimal("12.00"));
+        huerfano.setId(5L);
+        huerfano.setRoundNumber(1);
+        Invoice invoice = invoiceWithItems(List.of(huerfano));
+        when(invoiceRepository.findByIdAndOrganizationId(100L, ORG_ID)).thenReturn(Optional.of(invoice));
+
+        InvoiceResponse response = invoiceService.getInvoiceById(100L, ORG_ID);
+
+        assertThat(response.items().get(0).productName()).isEqualTo("(producto no disponible)");
+        assertThat(response.items().get(0).lineTotal()).isEqualByComparingTo("12.00");
     }
 }
