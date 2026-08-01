@@ -115,9 +115,19 @@ public class InvoiceService {
         return mapToResponse(savedInvoice);
     }
 
+    /**
+     * Historial de pagos con las filas de pago y las líneas de producto ya
+     * cargadas (feature 028). Son dos consultas de coste constante: sin ellas,
+     * cada factura del listado dispararía las suyas propias (N+1).
+     */
     @Transactional(readOnly = true)
     public List<InvoiceResponse> getInvoices(Long organizationId) {
-        return invoiceRepository.findByOrganizationIdOrderByPaidAtDesc(organizationId).stream()
+        List<Invoice> invoices = invoiceRepository.findAllWithPaymentsByOrganizationId(organizationId);
+        if (invoices.isEmpty()) {
+            return List.of();
+        }
+        invoiceRepository.fetchOrderItemsFor(invoices);
+        return invoices.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }

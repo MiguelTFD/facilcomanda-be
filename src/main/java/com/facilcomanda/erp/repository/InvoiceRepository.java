@@ -16,6 +16,26 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     List<Invoice> findByOrganizationIdOrderByPaidAtDesc(Long organizationId);
     boolean existsByOrder_IdAndOrganizationId(Long orderId, Long organizationId);
 
+    // --- Carga del ticket de venta (feature 028) ---
+    // Dos consultas y no una: Hibernate lanza MultipleBagFetchException al hacer
+    // join fetch de dos colecciones List en la misma query. La segunda consulta
+    // deja los ítems en el contexto de persistencia; su resultado se descarta.
+
+    /** Facturas de la organización con sus filas de pago ya cargadas. */
+    @Query("select distinct i from Invoice i "
+            + "left join fetch i.payments "
+            + "where i.organizationId = :organizationId "
+            + "order by i.paidAt desc")
+    List<Invoice> findAllWithPaymentsByOrganizationId(@Param("organizationId") Long organizationId);
+
+    /** Carga en memoria los ítems y productos de las facturas dadas. */
+    @Query("select distinct i from Invoice i "
+            + "left join fetch i.order o "
+            + "left join fetch o.orderItems oi "
+            + "left join fetch oi.product "
+            + "where i in :invoices")
+    List<Invoice> fetchOrderItemsFor(@Param("invoices") List<Invoice> invoices);
+
     // --- Agregaciones del resumen de reportes (feature 022) ---
     // El período es semiabierto: paidAt >= :from y paidAt < :toExclusive.
 

@@ -377,4 +377,49 @@ class InvoiceServiceTest {
         assertThat(response.items().get(0).productName()).isEqualTo("(producto no disponible)");
         assertThat(response.items().get(0).lineTotal()).isEqualByComparingTo("12.00");
     }
+
+    // ---------- Feature 028: carga sin N+1 y aislamiento multi-tenant (CA8, CA9) ----------
+
+    @Test
+    void getInvoices_usaLasConsultasConFetchYNoLaConsultaSimple() {
+        Invoice invoice = invoiceWithItems(List.of(itemOf(1L, "Lomo saltado", 2, "50.00", 1, null)));
+        when(invoiceRepository.findAllWithPaymentsByOrganizationId(ORG_ID)).thenReturn(List.of(invoice));
+
+        List<InvoiceResponse> responses = invoiceService.getInvoices(ORG_ID);
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).items()).hasSize(1);
+        verify(invoiceRepository).fetchOrderItemsFor(List.of(invoice));
+        verify(invoiceRepository, never()).findByOrganizationIdOrderByPaidAtDesc(ORG_ID);
+    }
+
+    @Test
+    void getInvoices_sinFacturas_noLanzaLaSegundaConsulta() {
+        when(invoiceRepository.findAllWithPaymentsByOrganizationId(ORG_ID)).thenReturn(List.of());
+
+        assertThat(invoiceService.getInvoices(ORG_ID)).isEmpty();
+
+        verify(invoiceRepository, never()).fetchOrderItemsFor(any());
+    }
+
+    @Test
+    void getInvoices_filtraSiemprePorLaOrganizacionDelToken() {
+        Long otraOrg = 99L;
+        when(invoiceRepository.findAllWithPaymentsByOrganizationId(otraOrg)).thenReturn(List.of());
+
+        invoiceService.getInvoices(otraOrg);
+
+        verify(invoiceRepository).findAllWithPaymentsByOrganizationId(otraOrg);
+        verify(invoiceRepository, never()).findAllWithPaymentsByOrganizationId(ORG_ID);
+    }
+
+    @Test
+    void getInvoiceById_deOtraOrganizacion_noDevuelveLineas() {
+        when(invoiceRepository.findByIdAndOrganizationId(100L, 99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> invoiceService.getInvoiceById(100L, 99L))
+                .isInstanceOf(RuntimeException.class);
+
+        verify(invoiceRepository, never()).findByIdAndOrganizationId(100L, ORG_ID);
+    }
 }
