@@ -1,5 +1,6 @@
 package com.facilcomanda.erp.service;
 
+import com.facilcomanda.erp.dto.InvoiceItemResponse;
 import com.facilcomanda.erp.dto.InvoicePaymentRequest;
 import com.facilcomanda.erp.dto.InvoiceResponse;
 import com.facilcomanda.erp.dto.PaymentEntryRequest;
@@ -8,6 +9,7 @@ import com.facilcomanda.erp.exception.PaymentValidationException;
 import com.facilcomanda.erp.model.Invoice;
 import com.facilcomanda.erp.model.InvoicePayment;
 import com.facilcomanda.erp.model.Order;
+import com.facilcomanda.erp.model.OrderItem;
 import com.facilcomanda.erp.model.RestaurantTable;
 import com.facilcomanda.erp.model.User;
 import com.facilcomanda.erp.model.enums.OrderStatus;
@@ -18,8 +20,10 @@ import com.facilcomanda.erp.repository.OrderRepository;
 import com.facilcomanda.erp.repository.RestaurantTableRepository;
 import com.facilcomanda.erp.repository.UserRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -111,9 +115,19 @@ public class InvoiceService {
         return mapToResponse(savedInvoice);
     }
 
+    /**
+     * Historial de pagos con las filas de pago y las líneas de producto ya
+     * cargadas (feature 028). Son dos consultas de coste constante: sin ellas,
+     * cada factura del listado dispararía las suyas propias (N+1).
+     */
     @Transactional(readOnly = true)
     public List<InvoiceResponse> getInvoices(Long organizationId) {
-        return invoiceRepository.findByOrganizationIdOrderByPaidAtDesc(organizationId).stream()
+        List<Invoice> invoices = invoiceRepository.findAllWithPaymentsByOrganizationId(organizationId);
+        if (invoices.isEmpty()) {
+            return List.of();
+        }
+        invoiceRepository.fetchOrderItemsFor(invoices);
+        return invoices.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
@@ -212,6 +226,36 @@ public class InvoiceService {
                 invoice.getCashier() != null ? invoice.getCashier().getId() : null,
                 invoice.getCashierEmail(),
                 invoice.getNotes(),
-                payments);
+                payments,
+                mapItems(invoice));
+    }
+
+    /**
+     * Líneas del ticket de venta (feature 028), tomadas de la orden de la factura
+     * y ordenadas por ronda de pedido y luego por id, que es el orden en que se
+     * pidieron.
+     */
+    private List<InvoiceItemResponse> mapItems(Invoice invoice) {
+        if (invoice.getOrder() == null || invoice.getOrder().getOrderItems() == null) {
+            return List.of();
+        }
+        return invoice.getOrder().getOrderItems().stream()
+                .sorted(Comparator
+                        .comparing(OrderItem::getRoundNumber, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(OrderItem::getId, Comparator.nullsFirst(Comparator.naturalOrder())))
+                .map(this::mapItem)
+                .collect(Collectors.toList());
+    }
+
+    private InvoiceItemResponse mapItem(OrderItem item) {
+        BigDecimal lineTotal = item.getSubtotal() != null ? item.getSubtotal() : BigDecimal.ZERO;
+        int quantity = item.getQuantity() != null ? item.getQuantity() : 0;
+        BigDecimal unitPrice = quantity > 0
+                ? lineTotal.divide(BigDecimal.valueOf(quantity), 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        String productName = item.getProduct() != null && item.getProduct().getName() != null
+                ? item.getProduct().getName()
+                : "(producto no disponible)";
+        return new InvoiceItemResponse(productName, quantity, unitPrice, lineTotal, item.getComments());
     }
 }
