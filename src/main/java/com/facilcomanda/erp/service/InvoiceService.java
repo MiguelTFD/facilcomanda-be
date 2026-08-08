@@ -21,6 +21,7 @@ import com.facilcomanda.erp.repository.RestaurantTableRepository;
 import com.facilcomanda.erp.repository.UserRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -40,13 +41,15 @@ public class InvoiceService {
     private final OrderRepository orderRepository;
     private final RestaurantTableRepository restaurantTableRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
     public InvoiceService(InvoiceRepository invoiceRepository, OrderRepository orderRepository,
-            RestaurantTableRepository restaurantTableRepository, UserRepository userRepository) {
+            RestaurantTableRepository restaurantTableRepository, UserRepository userRepository, Clock clock) {
         this.invoiceRepository = invoiceRepository;
         this.orderRepository = orderRepository;
         this.restaurantTableRepository = restaurantTableRepository;
         this.userRepository = userRepository;
+        this.clock = clock;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -76,7 +79,7 @@ public class InvoiceService {
         User cashier = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        LocalDateTime paidAt = LocalDateTime.now();
+        LocalDateTime paidAt = LocalDateTime.now(clock);
         Invoice invoice = new Invoice();
         invoice.setOrganizationId(organizationId);
         invoice.setOrder(order);

@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,13 +36,15 @@ public class OrderService {
     private final RestaurantTableRepository restaurantTableRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
     public OrderService(OrderRepository orderRepository, RestaurantTableRepository restaurantTableRepository,
-            ProductRepository productRepository, UserRepository userRepository) {
+            ProductRepository productRepository, UserRepository userRepository, Clock clock) {
         this.orderRepository = orderRepository;
         this.restaurantTableRepository = restaurantTableRepository;
         this.productRepository = productRepository;
         this.userRepository = userRepository;
+        this.clock = clock;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -69,7 +72,7 @@ public class OrderService {
         order.setUser(user);
         order.setStatus(OrderStatus.PENDING);
         order.setType(request.type());
-        order.setOrderDate(LocalDateTime.now());
+        order.setOrderDate(LocalDateTime.now(clock));
         order.setIdempotencyKey(request.idempotencyKey());
 
         BigDecimal total = BigDecimal.ZERO;
@@ -179,7 +182,7 @@ public class OrderService {
         }
 
         order.setStatus(OrderStatus.DELIVERED);
-        order.setAttendedAt(LocalDateTime.now());
+        order.setAttendedAt(LocalDateTime.now(clock));
 
         return mapToResponse(orderRepository.save(order));
     }
@@ -244,7 +247,7 @@ public class OrderService {
 
         // Aplicar: descontar solo el delta y agregar las líneas de la ronda nueva.
         int newRound = currentMaxRound + 1;
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(clock);
         for (Map.Entry<Long, Integer> entry : deltaByProduct.entrySet()) {
             Product product = productsByDelta.get(entry.getKey());
             int delta = entry.getValue();

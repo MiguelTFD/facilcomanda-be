@@ -29,6 +29,9 @@ services:
       # Dentro de la red de Docker la BD se llama "db"; pisa cualquier DB_HOST del .env
       DB_HOST: db
       DB_PORT: 5432
+      # Refuerzo de la zona horaria (feature 033). El mecanismo real es el bean
+      # Clock del backend; esto sostiene la zona del contenedor si aquel faltara.
+      TZ: America/Lima
     depends_on:
       db:
         condition: service_healthy

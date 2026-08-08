@@ -15,10 +15,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -43,11 +48,21 @@ class ExpenseServiceTest {
     private static final Long EXPENSE_ID = 55L;
     private static final String AUTHOR_EMAIL = "cajero@facilcomanda.test";
     private static final LocalDate TODAY = LocalDate.of(2026, 7, 18);
+    /** Feature 033: las 18:30 del 08/08/2026 en Lima son las 23:30 UTC. */
+    private static final LocalDateTime LIMA_NOW = LocalDateTime.of(2026, 8, 8, 18, 30);
 
     @Mock
     private ExpenseRepository expenseRepository;
     @Mock
     private UserRepository userRepository;
+
+    /**
+     * Reloj fijo inyectado por constructor. Va como {@code @Spy} y nunca como
+     * {@code @Mock}: un mock de {@link Clock} devolvería {@code null} en
+     * {@code instant()} y reventaría con NPE en cada test que estampe una fecha.
+     */
+    @Spy
+    private Clock clock = Clock.fixed(Instant.parse("2026-08-08T23:30:00Z"), ZoneId.of("America/Lima"));
 
     @InjectMocks
     private ExpenseService expenseService;
@@ -115,6 +130,34 @@ class ExpenseServiceTest {
 
         verify(expenseRepository).save(expenseCaptor.capture());
         assertThat(expenseCaptor.getValue().getDescription()).isEqualTo("Taxi mercado");
+    }
+
+    // ---------- Feature 033: createdAt en hora de Lima, expenseDate intacta ----------
+
+    @Test
+    void createExpense_sellaCreatedAtConLaHoraDeLimaDelReloj() {
+        stubAuthorAndSave();
+
+        create(new ExpenseRequest(new BigDecimal("40.50"), "Compra de gas", TODAY));
+
+        verify(expenseRepository).save(expenseCaptor.capture());
+        // 18:30 de Lima, no las 23:30 UTC del mismo instante.
+        assertThat(expenseCaptor.getValue().getCreatedAt()).isEqualTo(LIMA_NOW);
+    }
+
+    /**
+     * Decisión 7 de la spec 033: {@code expenseDate} la elige una persona en un
+     * selector, no la estampa el reloj. Este test existe para impedir que el
+     * arreglo de zona horaria la desplace también.
+     */
+    @Test
+    void createExpense_noDesplazaLaExpenseDateQueLlegaEnElRequest() {
+        stubAuthorAndSave();
+
+        create(new ExpenseRequest(new BigDecimal("40.50"), "Compra de gas", TODAY));
+
+        verify(expenseRepository).save(expenseCaptor.capture());
+        assertThat(expenseCaptor.getValue().getExpenseDate()).isEqualTo(TODAY);
     }
 
     // ---------- Validaciones de dominio (4xx) ----------
