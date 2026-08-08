@@ -26,10 +26,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -52,6 +56,8 @@ class InvoiceServiceTest {
     private static final Long ORG_ID = 7L;
     private static final Long ORDER_ID = 42L;
     private static final String CASHIER_EMAIL = "cajero@facilcomanda.test";
+    /** Feature 033: las 18:30 del 08/08/2026 en Lima son las 23:30 UTC. */
+    private static final LocalDateTime LIMA_NOW = LocalDateTime.of(2026, 8, 8, 18, 30);
 
     @Mock
     private InvoiceRepository invoiceRepository;
@@ -61,6 +67,14 @@ class InvoiceServiceTest {
     private RestaurantTableRepository restaurantTableRepository;
     @Mock
     private UserRepository userRepository;
+
+    /**
+     * Reloj fijo inyectado por constructor. Va como {@code @Spy} y nunca como
+     * {@code @Mock}: un mock de {@link Clock} devolvería {@code null} en
+     * {@code instant()} y reventaría con NPE en cada test que estampe una fecha.
+     */
+    @Spy
+    private Clock clock = Clock.fixed(Instant.parse("2026-08-08T23:30:00Z"), ZoneId.of("America/Lima"));
 
     @InjectMocks
     private InvoiceService invoiceService;
@@ -97,6 +111,21 @@ class InvoiceServiceTest {
 
     private InvoiceResponse charge(InvoicePaymentRequest request) {
         return invoiceService.chargeOrder(ORDER_ID, request, ORG_ID, CASHIER_EMAIL);
+    }
+
+    // ---------- Feature 033 CA1: el cobro se sella en hora de Lima ----------
+
+    @Test
+    void chargeOrder_sellaPaidAtConLaHoraDeLimaDelReloj() {
+        order.setTotal(new BigDecimal("52.00"));
+        stubHappyPathDependencies();
+
+        charge(new InvoicePaymentRequest(
+                List.of(new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("52.00"), null)), null));
+
+        verify(invoiceRepository).save(invoiceCaptor.capture());
+        // 18:30 de Lima, no las 23:30 UTC del mismo instante.
+        assertThat(invoiceCaptor.getValue().getPaidAt()).isEqualTo(LIMA_NOW);
     }
 
     // ---------- CA1: solo efectivo (comportamiento actual) ----------

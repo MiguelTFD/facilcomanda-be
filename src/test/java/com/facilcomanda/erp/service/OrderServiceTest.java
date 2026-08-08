@@ -19,10 +19,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,6 +52,8 @@ class OrderServiceTest {
     private static final Long ORG_ID = 7L;
     private static final Long ORDER_ID = 42L;
     private static final String MESERO_EMAIL = "mesero@facilcomanda.test";
+    /** Feature 033: las 18:30 del 08/08/2026 en Lima son las 23:30 UTC. */
+    private static final LocalDateTime LIMA_NOW = LocalDateTime.of(2026, 8, 8, 18, 30);
 
     @Mock
     private OrderRepository orderRepository;
@@ -57,6 +63,14 @@ class OrderServiceTest {
     private ProductRepository productRepository;
     @Mock
     private UserRepository userRepository;
+
+    /**
+     * Reloj fijo inyectado por constructor. Va como {@code @Spy} y nunca como
+     * {@code @Mock}: un mock de {@link Clock} devolvería {@code null} en
+     * {@code instant()} y reventaría con NPE en cada test que estampe una fecha.
+     */
+    @Spy
+    private Clock clock = Clock.fixed(Instant.parse("2026-08-08T23:30:00Z"), ZoneId.of("America/Lima"));
 
     @InjectMocks
     private OrderService orderService;
@@ -95,6 +109,34 @@ class OrderServiceTest {
         }
         order.setTotal(total);
         return order;
+    }
+
+    // ---------- Feature 033 CA1: las fechas se sellan en hora de Lima ----------
+
+    @Test
+    void createOrder_sellaOrderDateConLaHoraDeLimaDelReloj() {
+        OrderRequest request = new OrderRequest(null, "MESA", "idem-tz",
+                List.of(new OrderItemRequest(1L, 1, null)));
+        when(orderRepository.existsByIdempotencyKeyAndOrganizationId("idem-tz", ORG_ID)).thenReturn(false);
+        when(userRepository.findByEmail(MESERO_EMAIL)).thenReturn(Optional.of(new User()));
+        when(productRepository.findByIdAndOrganizationId(1L, ORG_ID)).thenReturn(Optional.of(coca));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OrderResponse response = orderService.createOrder(request, ORG_ID, MESERO_EMAIL);
+
+        // 18:30 de Lima, no las 23:30 UTC del mismo instante.
+        assertThat(response.orderDate()).isEqualTo(LIMA_NOW);
+    }
+
+    @Test
+    void markAttended_sellaAttendedAtConLaHoraDeLimaDelReloj() {
+        Order order = orderInStatus(OrderStatus.PENDING);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.markAttended(ORDER_ID, ORG_ID);
+
+        assertThat(order.getAttendedAt()).isEqualTo(LIMA_NOW);
     }
 
     // ---------- CA1: creación deja todo en ronda 1 con createdAt ----------
