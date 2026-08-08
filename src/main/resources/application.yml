@@ -22,6 +22,12 @@ spring:
     baseline-on-migrate: true
     baseline-version: 1
 
+# Zona con la que la aplicación estampa TODA fecha (paid_at, order_date,
+# attended_at, created_at). No es cosmética: define la frontera del día en
+# los reportes. Un cambio de servidor no debe alterarla.
+app:
+  timezone: America/Lima
+
 server:
   port: ${PORT:8080}
 
