@@ -23,6 +23,7 @@ import com.facilcomanda.erp.repository.RestaurantTableRepository;
 import com.facilcomanda.erp.repository.RoleRepository;
 import com.facilcomanda.erp.repository.UserRepository;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -70,6 +71,7 @@ public class DataSeeder implements CommandLineRunner {
     private final OrderRepository orderRepository;
     private final InvoiceRepository invoiceRepository;
     private final PasswordEncoder passwordEncoder;
+    private final Clock clock;
 
     public DataSeeder(OrganizationRepository organizationRepository,
                       RoleRepository roleRepository,
@@ -80,7 +82,8 @@ public class DataSeeder implements CommandLineRunner {
                       ProductRepository productRepository,
                       OrderRepository orderRepository,
                       InvoiceRepository invoiceRepository,
-                      PasswordEncoder passwordEncoder) {
+                      PasswordEncoder passwordEncoder,
+                      Clock clock) {
         this.organizationRepository = organizationRepository;
         this.roleRepository = roleRepository;
         this.userRepository = userRepository;
@@ -91,6 +94,7 @@ public class DataSeeder implements CommandLineRunner {
         this.orderRepository = orderRepository;
         this.invoiceRepository = invoiceRepository;
         this.passwordEncoder = passwordEncoder;
+        this.clock = clock;
     }
 
     @Override
@@ -340,7 +344,7 @@ public class DataSeeder implements CommandLineRunner {
 
     private Order createOrder(Organization organization, RestaurantTable table, User user, OrderStatus status,
                               String idempotencyKey, String comments) {
-        Order order = new Order(organization.getId(), LocalDateTime.now(), "LOCAL", comments, status,
+        Order order = new Order(organization.getId(), LocalDateTime.now(clock), "LOCAL", comments, status,
                 table, user, BigDecimal.ZERO);
         order.setIdempotencyKey(idempotencyKey);
         return order;
@@ -377,7 +381,7 @@ public class DataSeeder implements CommandLineRunner {
         invoice.setAmountPaid(amountPaid);
         invoice.setChangeAmount(amountPaid.subtract(total));
         invoice.setPaymentMethod("EFECTIVO");
-        invoice.setPaidAt(LocalDateTime.now());
+        invoice.setPaidAt(LocalDateTime.now(clock));
         if (cashier != null) {
             invoice.setCashier(cashier);
             invoice.setCashierEmail(cashier.getEmail());

@@ -9,6 +9,7 @@ import com.facilcomanda.erp.model.User;
 import com.facilcomanda.erp.repository.ExpenseRepository;
 import com.facilcomanda.erp.repository.UserRepository;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -28,10 +29,12 @@ public class ExpenseService {
 
     private final ExpenseRepository expenseRepository;
     private final UserRepository userRepository;
+    private final Clock clock;
 
-    public ExpenseService(ExpenseRepository expenseRepository, UserRepository userRepository) {
+    public ExpenseService(ExpenseRepository expenseRepository, UserRepository userRepository, Clock clock) {
         this.expenseRepository = expenseRepository;
         this.userRepository = userRepository;
+        this.clock = clock;
     }
 
     @Transactional
@@ -45,10 +48,12 @@ public class ExpenseService {
         expense.setOrganizationId(organizationId);
         expense.setAmount(request.amount());
         expense.setDescription(description);
+        // expenseDate llega del request: la elige una persona en un selector y el
+        // reloj no la toca (decisión 7 de la spec 033).
         expense.setExpenseDate(request.expenseDate());
         expense.setRegisteredByUserId(author.getId());
         expense.setRegisteredByEmail(author.getEmail());
-        expense.setCreatedAt(LocalDateTime.now());
+        expense.setCreatedAt(LocalDateTime.now(clock));
 
         return mapToResponse(expenseRepository.save(expense));
     }
