@@ -22,4 +22,7 @@ USER spring:spring
 COPY --from=build /app/target/erp-0.0.1-SNAPSHOT.jar app.jar
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+# -Duser.timezone es REFUERZO, no el mecanismo: la zona con la que se estampan
+# las fechas la manda el bean Clock (config/TimeConfig). Esto cubre los logs,
+# el `date` del contenedor y cualquier now() que se cuele sin el reloj.
+ENTRYPOINT ["java", "-Duser.timezone=America/Lima", "-jar", "/app/app.jar"]
