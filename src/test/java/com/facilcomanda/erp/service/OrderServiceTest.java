@@ -91,10 +91,15 @@ class OrderServiceTest {
     }
 
     private OrderItem existingItem(Product p, int qty, int round, LocalDateTime createdAt) {
+        return existingItem(p, qty, round, createdAt, null);
+    }
+
+    private OrderItem existingItem(Product p, int qty, int round, LocalDateTime createdAt, String comments) {
         OrderItem it = new OrderItem(ORG_ID, null, p, qty,
                 p.getUnitPrice().multiply(BigDecimal.valueOf(qty)));
         it.setRoundNumber(round);
         it.setCreatedAt(createdAt);
+        it.setComments(comments);
         return it;
     }
 
@@ -396,5 +401,162 @@ class OrderServiceTest {
 
         assertThat(response.attended()).isFalse();
         assertThat(response.attendedAt()).isNull();
+    }
+
+    // ============ Feature 035 VR — la nota se guarda al MODIFICAR la comanda ============
+    // D1: la nota entrante se escribe siempre en la línea de mayor ronda de ese producto,
+    // exista ya o se acabe de crear en esta edición; las rondas anteriores no se reescriben.
+    // D2: nota vacía o solo espacios borra (comments = null). D3: cambiar solo la nota no
+    // reactiva una comanda atendida. Ver spec/features/035-xx-nota-edicion-comanda/spec.md.
+
+    private OrderItem itemInRound(Order order, Long productId, int round) {
+        return order.getOrderItems().stream()
+                .filter(i -> i.getProduct().getId().equals(productId) && i.getRoundNumber() == round)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(
+                        "No hay línea del producto " + productId + " en la ronda " + round));
+    }
+
+    // ---------- CA1: el incidente reportado — una sola línea, sin cambio de cantidad ----------
+
+    @Test
+    void updateOrder_notaSobreProductoYaPedidoSinCambioDeCantidad_seGuardaEnSuLinea() {
+        Order order = pendingOrderWith(existingItem(coca, 2, 1, LocalDateTime.now().minusMinutes(10)));
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OrderResponse response = orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 2, "sin hielo"))), ORG_ID);
+
+        // La nota queda en la línea que ya existía: no se crea ronda nueva ni se mueve stock.
+        assertThat(order.getOrderItems()).hasSize(1);
+        assertThat(order.getOrderItems().get(0).getComments()).isEqualTo("sin hielo");
+        assertThat(order.getOrderItems().get(0).getRoundNumber()).isEqualTo(1);
+        assertThat(coca.getStock()).isEqualTo(10);
+        assertThat(response.items()).singleElement()
+                .satisfies(item -> assertThat(item.comments()).isEqualTo("sin hielo"));
+        assertThat(response.modified()).isFalse();
+    }
+
+    // ---------- CA2: con varias rondas solo se toca la más alta ----------
+
+    @Test
+    void updateOrder_notaSobreProductoConVariasRondas_soloActualizaLaLineaDeLaRondaMasAlta() {
+        Order order = pendingOrderWith(
+                existingItem(coca, 2, 1, LocalDateTime.now().minusMinutes(30), "nota de la ronda 1"),
+                existingItem(coca, 1, 2, LocalDateTime.now().minusMinutes(10), "nota de la ronda 2"));
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // 3 = total ya enviado (2 + 1): no hay delta, solo cambia la nota.
+        orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 3, "nota nueva"))), ORG_ID);
+
+        assertThat(order.getOrderItems()).hasSize(2);
+        assertThat(itemInRound(order, 1L, 1).getComments()).isEqualTo("nota de la ronda 1");
+        assertThat(itemInRound(order, 1L, 2).getComments()).isEqualTo("nota nueva");
+    }
+
+    // ---------- CA3: producto agregado en la edición (control: ya funcionaba) ----------
+
+    @Test
+    void updateOrder_productoNuevoConNota_laGuardaEnLaLineaDeLaRondaNueva() {
+        Order order = pendingOrderWith(existingItem(coca, 2, 1, LocalDateTime.now().minusMinutes(30)));
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(productRepository.findByIdAndOrganizationId(2L, ORG_ID)).thenReturn(Optional.of(papas));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 2, null), new OrderItemRequest(2L, 3, "sin sal"))), ORG_ID);
+
+        assertThat(itemInRound(order, 2L, 2).getComments()).isEqualTo("sin sal");
+        assertThat(itemInRound(order, 1L, 1).getComments()).isNull();
+    }
+
+    // ---------- CA4: guardar sin cambiar nada es idempotente ----------
+
+    @Test
+    void updateOrder_sinCambiosNiEnLaNota_noTocaLaNotaNiCreaRonda() {
+        Order order = pendingOrderWith(
+                existingItem(coca, 2, 1, LocalDateTime.now().minusMinutes(10), "sin hielo"));
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OrderResponse response = orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 2, "sin hielo"))), ORG_ID);
+
+        assertThat(order.getOrderItems()).hasSize(1);
+        assertThat(order.getOrderItems().get(0).getComments()).isEqualTo("sin hielo");
+        assertThat(order.getOrderItems().get(0).getRoundNumber()).isEqualTo(1);
+        assertThat(response.modified()).isFalse();
+        assertThat(coca.getStock()).isEqualTo(10);
+    }
+
+    // ---------- CA5: nota en blanco o nula borra la existente ----------
+
+    @Test
+    void updateOrder_notaSoloConEspaciosSobreProductoConNota_dejaLaLineaSinNota() {
+        Order order = pendingOrderWith(
+                existingItem(coca, 2, 1, LocalDateTime.now().minusMinutes(10), "sin hielo"));
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 2, "   "))), ORG_ID);
+
+        assertThat(order.getOrderItems().get(0).getComments()).isNull();
+    }
+
+    @Test
+    void updateOrder_notaNulaSobreProductoConNota_dejaLaLineaSinNota() {
+        Order order = pendingOrderWith(
+                existingItem(coca, 2, 1, LocalDateTime.now().minusMinutes(10), "sin hielo"));
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 2, null))), ORG_ID);
+
+        assertThat(order.getOrderItems().get(0).getComments()).isNull();
+    }
+
+    // ---------- CA6: la nota no reactiva una comanda atendida; el delta sí ----------
+
+    @Test
+    void updateOrder_soloCambiaLaNotaEnOrdenAtendida_siguenDeliveredYSeGuardaLaNota() {
+        LocalDateTime sello = LocalDateTime.now().minusMinutes(5);
+        Order order = orderInStatus(OrderStatus.DELIVERED);
+        order.setAttendedAt(sello);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        OrderResponse response = orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 2, "sin hielo"))), ORG_ID);
+
+        // La nota se guarda, pero la comanda no vuelve a cocina (feature 027, D3 de la 035).
+        assertThat(order.getOrderItems()).hasSize(1);
+        assertThat(order.getOrderItems().get(0).getComments()).isEqualTo("sin hielo");
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(order.getAttendedAt()).isEqualTo(sello);
+        assertThat(response.attended()).isTrue();
+    }
+
+    @Test
+    void updateOrder_conDeltaYNotaSobreOrdenAtendida_vuelveAPendingYLaNotaVaALaRondaNueva() {
+        LocalDateTime sello = LocalDateTime.now().minusMinutes(5);
+        Order order = pendingOrderWith(
+                existingItem(coca, 2, 1, LocalDateTime.now().minusMinutes(30), "nota vieja"));
+        order.setStatus(OrderStatus.DELIVERED);
+        order.setAttendedAt(sello);
+        when(orderRepository.findByIdAndOrganizationId(ORDER_ID, ORG_ID)).thenReturn(Optional.of(order));
+        when(productRepository.findByIdAndOrganizationId(1L, ORG_ID)).thenReturn(Optional.of(coca));
+        when(orderRepository.save(any(Order.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        orderService.updateOrder(ORDER_ID, new OrderRequest(null, "MESA", "idem-1",
+                List.of(new OrderItemRequest(1L, 3, "nota nueva"))), ORG_ID);
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING);
+        assertThat(itemInRound(order, 1L, 1).getComments()).isEqualTo("nota vieja");
+        assertThat(itemInRound(order, 1L, 2).getComments()).isEqualTo("nota nueva");
     }
 }
