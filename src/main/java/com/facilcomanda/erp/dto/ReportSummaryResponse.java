@@ -9,6 +9,11 @@ import java.util.Map;
  * Resumen de un período (feature 022). {@code collectedByMethod} siempre trae
  * las tres claves EFECTIVO, YAPE y CREDITO, con cero cuando no hubo cobros por
  * ese método.
+ *
+ * <p>{@code shifts} (feature 034) trae los tres bloques de turno <b>solo cuando
+ * {@code from} y {@code to} son el mismo día</b>; en semanal y mensual es lista
+ * vacía, nunca {@code null}. Va como último componente para no mover ninguno de
+ * los nueve anteriores.</p>
  */
 public record ReportSummaryResponse(
         LocalDate from,
@@ -19,5 +24,6 @@ public record ReportSummaryResponse(
         Map<String, BigDecimal> collectedByMethod,
         BigDecimal grossTotal,
         BigDecimal expensesTotal,
-        BigDecimal netTotal) {
+        BigDecimal netTotal,
+        List<ShiftSummaryResponse> shifts) {
 }
