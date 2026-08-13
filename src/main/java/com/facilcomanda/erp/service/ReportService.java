@@ -75,7 +75,7 @@ public class ReportService {
                 .sum();
 
         return new ReportSummaryResponse(from, to, ordersCount, itemsCount, itemsByProduct,
-                collectedByMethod, grossTotal, expensesTotal, netTotal);
+                collectedByMethod, grossTotal, expensesTotal, netTotal, List.of());
     }
 
     private BigDecimal zeroIfNull(BigDecimal value) {

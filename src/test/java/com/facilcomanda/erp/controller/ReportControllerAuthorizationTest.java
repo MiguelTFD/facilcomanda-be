@@ -62,7 +62,11 @@ class ReportControllerAuthorizationTest {
                 FROM, TO, 4L, 8L,
                 List.of(new com.facilcomanda.erp.dto.ProductQuantityResponse("Ceviche", 5L)),
                 collected,
-                new BigDecimal("185.00"), new BigDecimal("25.00"), new BigDecimal("160.00")));
+                new BigDecimal("185.00"), new BigDecimal("25.00"), new BigDecimal("160.00"),
+                // Turnos (feature 034): este es un rango de un día, pero el
+                // stub no los ejercita — el contrato de los bloques se prueba
+                // en ReportServiceShiftsTest.
+                List.of()));
 
         mockMvc.perform(get("/api/reports/summary")
                         .param("from", "2026-07-18").param("to", "2026-07-18").with(as(RoleName.CAJERO)))
