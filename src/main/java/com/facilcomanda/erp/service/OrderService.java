@@ -259,7 +259,6 @@ public class OrderService {
             orderItem.setOrganizationId(organizationId);
             orderItem.setProduct(product);
             orderItem.setQuantity(delta);
-            orderItem.setComments(commentsByProduct.get(entry.getKey()));
             orderItem.setRoundNumber(newRound);
             orderItem.setCreatedAt(now);
 
@@ -270,6 +269,27 @@ public class OrderService {
             orderItem.setSubtotal(price.multiply(BigDecimal.valueOf(delta)));
 
             order.addOrderItem(orderItem);
+        }
+
+        // Feature 035 (D1): la nota entrante se escribe en la línea de MAYOR ronda de cada
+        // producto, sea la recién creada arriba o la que ya estaba persistida. Antes solo se
+        // aplicaba al construir una línea nueva, así que la nota de un producto sin aumento
+        // de cantidad se leía y se descartaba en silencio. Las rondas anteriores no se
+        // reescriben nunca: su nota es el registro de lo que la cocina recibió entonces.
+        // Se hace en un único sitio, después de agregar los deltas, para que la línea nueva
+        // y la existente sigan exactamente la misma regla.
+        Map<Long, OrderItem> commentTargetByProduct = new LinkedHashMap<>();
+        for (OrderItem item : order.getOrderItems()) {
+            OrderItem current = commentTargetByProduct.get(item.getProduct().getId());
+            if (current == null || roundOf(item) >= roundOf(current)) {
+                commentTargetByProduct.put(item.getProduct().getId(), item);
+            }
+        }
+        for (Map.Entry<Long, String> comment : commentsByProduct.entrySet()) {
+            OrderItem target = commentTargetByProduct.get(comment.getKey());
+            if (target != null) {
+                target.setComments(normalizeComments(comment.getValue()));
+            }
         }
 
         // Feature 027: una ronda nueva reactiva la comanda para la cocina. Se condiciona
@@ -287,6 +307,22 @@ public class OrderService {
         order.setTotal(total);
 
         return mapToResponse(orderRepository.save(order));
+    }
+
+    /**
+     * Ronda de una línea. Las filas anteriores a la feature 025 podrían no tenerla;
+     * se tratan como ronda 1, igual que hizo el backfill de la migración V2.
+     */
+    private int roundOf(OrderItem item) {
+        return item.getRoundNumber() != null ? item.getRoundNumber() : 1;
+    }
+
+    /**
+     * Feature 035 (D2): una nota vacía o con solo espacios borra la nota de la línea.
+     * Sin esto no habría forma de retirar una observación equivocada.
+     */
+    private String normalizeComments(String comments) {
+        return (comments == null || comments.isBlank()) ? null : comments;
     }
 
     private OrderResponse mapToResponse(Order order) {
