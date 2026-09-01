@@ -5,6 +5,7 @@ import com.facilcomanda.erp.dto.OrderItemResponse;
 import com.facilcomanda.erp.dto.OrderRequest;
 import com.facilcomanda.erp.dto.OrderResponse;
 import com.facilcomanda.erp.dto.OrderStatusRequest;
+import com.facilcomanda.erp.event.OrderCreatedEvent;
 import com.facilcomanda.erp.exception.OrderNotAttendableException;
 import com.facilcomanda.erp.exception.OrderReductionNotAllowedException;
 import com.facilcomanda.erp.model.Order;
@@ -18,6 +19,7 @@ import com.facilcomanda.erp.repository.ProductRepository;
 import com.facilcomanda.erp.repository.RestaurantTableRepository;
 import com.facilcomanda.erp.repository.UserRepository;
 import com.facilcomanda.erp.model.User;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,14 +39,17 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     public OrderService(OrderRepository orderRepository, RestaurantTableRepository restaurantTableRepository,
-            ProductRepository productRepository, UserRepository userRepository, Clock clock) {
+            ProductRepository productRepository, UserRepository userRepository, Clock clock,
+            ApplicationEventPublisher eventPublisher) {
         this.orderRepository = orderRepository;
         this.restaurantTableRepository = restaurantTableRepository;
         this.productRepository = productRepository;
         this.userRepository = userRepository;
         this.clock = clock;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -112,6 +117,10 @@ public class OrderService {
         order.setTotal(total);
 
         Order savedOrder = orderRepository.save(order);
+        
+        // Publicación del evento para desacoplar infraestructura (Impresora)
+        eventPublisher.publishEvent(new OrderCreatedEvent(savedOrder));
+        
         return mapToResponse(savedOrder);
     }
 
@@ -157,16 +166,6 @@ public class OrderService {
         return mapToResponse(orderRepository.save(order));
     }
 
-    /**
-     * Feature 027: marca la comanda como atendida por el MESERO. "Atendida" se
-     * persiste como {@link OrderStatus#DELIVERED} ({@code roles.md} decisión 6), de
-     * modo que la orden sigue siendo visible y cobrable para el CAJERO; lo único que
-     * cambia es que deja de mostrarse en la pantalla de cocina.
-     *
-     * <p>Idempotente: si la orden ya estaba atendida se devuelve tal cual, sin mover
-     * {@code attendedAt} — ese sello es la referencia para saber qué rondas de pedido
-     * llegaron después del último atendido.
-     */
     @Transactional(rollbackFor = Exception.class)
     public OrderResponse markAttended(Long id, Long organizationId) {
         Order order = orderRepository.findByIdAndOrganizationId(id, organizationId)
@@ -196,10 +195,6 @@ public class OrderService {
             throw new RuntimeException("Paid or cancelled orders cannot be modified");
         }
 
-        // Feature 025: preservar las rondas existentes y solo AGREGAR las líneas nuevas
-        // (el delta) como la ronda siguiente. Nunca se limpian ítems ni se devuelve stock.
-
-        // Totales ya persistidos por producto (sumando todas las rondas) y ronda máxima actual.
         Map<Long, Integer> persistedByProduct = new LinkedHashMap<>();
         int currentMaxRound = 0;
         for (OrderItem existing : order.getOrderItems()) {
@@ -209,7 +204,6 @@ public class OrderService {
             }
         }
 
-        // Totales entrantes por producto (el modal envía el total acumulado por producto).
         Map<Long, Integer> incomingByProduct = new LinkedHashMap<>();
         Map<Long, String> commentsByProduct = new LinkedHashMap<>();
         for (OrderItemRequest itemRequest : request.items()) {
@@ -217,8 +211,6 @@ public class OrderService {
             commentsByProduct.put(itemRequest.productId(), itemRequest.comments());
         }
 
-        // D3: no se permite bajar la cantidad total por producto por debajo de lo ya enviado
-        // (omitir un producto ya enviado equivale a bajarlo a 0). Validación antes de mutar.
         for (Map.Entry<Long, Integer> persisted : persistedByProduct.entrySet()) {
             int incoming = incomingByProduct.getOrDefault(persisted.getKey(), 0);
             if (incoming < persisted.getValue()) {
@@ -227,7 +219,6 @@ public class OrderService {
             }
         }
 
-        // Resolver deltas positivos y validar stock antes de aplicar (rechazo atómico).
         Map<Long, Product> productsByDelta = new LinkedHashMap<>();
         Map<Long, Integer> deltaByProduct = new LinkedHashMap<>();
         for (Map.Entry<Long, Integer> incoming : incomingByProduct.entrySet()) {
@@ -245,7 +236,6 @@ public class OrderService {
             deltaByProduct.put(incoming.getKey(), delta);
         }
 
-        // Aplicar: descontar solo el delta y agregar las líneas de la ronda nueva.
         int newRound = currentMaxRound + 1;
         LocalDateTime now = LocalDateTime.now(clock);
         for (Map.Entry<Long, Integer> entry : deltaByProduct.entrySet()) {
@@ -271,13 +261,6 @@ public class OrderService {
             order.addOrderItem(orderItem);
         }
 
-        // Feature 035 (D1): la nota entrante se escribe en la línea de MAYOR ronda de cada
-        // producto, sea la recién creada arriba o la que ya estaba persistida. Antes solo se
-        // aplicaba al construir una línea nueva, así que la nota de un producto sin aumento
-        // de cantidad se leía y se descartaba en silencio. Las rondas anteriores no se
-        // reescriben nunca: su nota es el registro de lo que la cocina recibió entonces.
-        // Se hace en un único sitio, después de agregar los deltas, para que la línea nueva
-        // y la existente sigan exactamente la misma regla.
         Map<Long, OrderItem> commentTargetByProduct = new LinkedHashMap<>();
         for (OrderItem item : order.getOrderItems()) {
             OrderItem current = commentTargetByProduct.get(item.getProduct().getId());
@@ -292,15 +275,10 @@ public class OrderService {
             }
         }
 
-        // Feature 027: una ronda nueva reactiva la comanda para la cocina. Se condiciona
-        // a que realmente se haya agregado algo: confirmar la edición sin cambios (delta 0)
-        // NO debe sacar del estado atendido. `attendedAt` se conserva a propósito, porque
-        // es lo que permite distinguir en cocina las rondas nuevas de las ya servidas.
         if (!deltaByProduct.isEmpty() && order.getStatus() == OrderStatus.DELIVERED) {
             order.setStatus(OrderStatus.PENDING);
         }
 
-        // Total = suma de subtotales de todas las rondas.
         BigDecimal total = order.getOrderItems().stream()
                 .map(OrderItem::getSubtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -309,18 +287,10 @@ public class OrderService {
         return mapToResponse(orderRepository.save(order));
     }
 
-    /**
-     * Ronda de una línea. Las filas anteriores a la feature 025 podrían no tenerla;
-     * se tratan como ronda 1, igual que hizo el backfill de la migración V2.
-     */
     private int roundOf(OrderItem item) {
         return item.getRoundNumber() != null ? item.getRoundNumber() : 1;
     }
 
-    /**
-     * Feature 035 (D2): una nota vacía o con solo espacios borra la nota de la línea.
-     * Sin esto no habría forma de retirar una observación equivocada.
-     */
     private String normalizeComments(String comments) {
         return (comments == null || comments.isBlank()) ? null : comments;
     }
@@ -336,7 +306,6 @@ public class OrderService {
                 item.getCreatedAt(),
                 item.getRoundNumber())).collect(Collectors.toList());
 
-        // modified derivada de los datos (D4): existe alguna línea en una ronda > 1.
         boolean modified = order.getOrderItems().stream()
                 .anyMatch(item -> item.getRoundNumber() != null && item.getRoundNumber() > 1);
 

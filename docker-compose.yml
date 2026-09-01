@@ -8,5 +8,4 @@ services:
     environment:
       PORT: 8080
     ports:
-      # Solo accesible desde el propio VPS (127.0.0.1). Nginx hará de proxy hacia afuera (paso siguiente).
       - "127.0.0.1:8080:8080"
