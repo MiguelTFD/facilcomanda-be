@@ -12,4 +12,6 @@ public final class EscPosCommands {
 
     public static final byte[] BOLD_ON = {27, 69, 1};
     public static final byte[] BOLD_OFF = {27, 69, 0};
+    public static final byte[] FONT_NORMAL = {27, 77, 0};
+    public static final byte[] FONT_SMALL = {27, 77, 1};
 }
