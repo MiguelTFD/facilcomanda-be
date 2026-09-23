@@ -121,7 +121,7 @@ class InvoiceServiceTest {
         stubHappyPathDependencies();
 
         charge(new InvoicePaymentRequest(
-                List.of(new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("52.00"), null)), null));
+                List.of(new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("52.00"), null)), null, null));
 
         verify(invoiceRepository).save(invoiceCaptor.capture());
         // 18:30 de Lima, no las 23:30 UTC del mismo instante.
@@ -136,7 +136,7 @@ class InvoiceServiceTest {
         stubHappyPathDependencies();
 
         InvoiceResponse response = charge(new InvoicePaymentRequest(
-                List.of(new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("52.00"), null)), null));
+                List.of(new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("52.00"), null)), null, null));
 
         verify(invoiceRepository).save(invoiceCaptor.capture());
         Invoice saved = invoiceCaptor.getValue();
@@ -161,7 +161,7 @@ class InvoiceServiceTest {
         stubHappyPathDependencies();
 
         charge(new InvoicePaymentRequest(
-                List.of(new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("60.00"), null)), null));
+                List.of(new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("60.00"), null)), null, null));
 
         verify(invoiceRepository).save(invoiceCaptor.capture());
         Invoice saved = invoiceCaptor.getValue();
@@ -179,7 +179,7 @@ class InvoiceServiceTest {
 
         charge(new InvoicePaymentRequest(List.of(
                 new PaymentEntryRequest(PaymentMethod.YAPE, new BigDecimal("30.00"), null),
-                new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("22.00"), null)), null));
+                new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("22.00"), null)), null, null));
 
         verify(invoiceRepository).save(invoiceCaptor.capture());
         Invoice saved = invoiceCaptor.getValue();
@@ -198,7 +198,7 @@ class InvoiceServiceTest {
 
         charge(new InvoicePaymentRequest(List.of(
                 new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("20.00"), null),
-                new PaymentEntryRequest(PaymentMethod.CREDITO, new BigDecimal("32.00"), "Sr. Pérez")), null));
+                new PaymentEntryRequest(PaymentMethod.CREDITO, new BigDecimal("32.00"), "Sr. Pérez")), null, null));
 
         verify(invoiceRepository).save(invoiceCaptor.capture());
         Invoice saved = invoiceCaptor.getValue();
@@ -222,7 +222,7 @@ class InvoiceServiceTest {
 
         charge(new InvoicePaymentRequest(List.of(
                 new PaymentEntryRequest(PaymentMethod.YAPE, new BigDecimal("30.00"), null),
-                new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("22.00"), null)), null));
+                new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("22.00"), null)), null, null));
 
         verify(invoiceRepository).save(invoiceCaptor.capture());
         Invoice saved = invoiceCaptor.getValue();
@@ -240,7 +240,7 @@ class InvoiceServiceTest {
         order.setTotal(new BigDecimal("52.00"));
         stubValidationDependencies();
 
-        assertThatThrownBy(() -> charge(new InvoicePaymentRequest(List.of(), null)))
+        assertThatThrownBy(() -> charge(new InvoicePaymentRequest(List.of(), null, null)))
                 .isInstanceOf(PaymentValidationException.class);
         verify(invoiceRepository, never()).save(any());
     }
@@ -252,7 +252,7 @@ class InvoiceServiceTest {
 
         assertThatThrownBy(() -> charge(new InvoicePaymentRequest(List.of(
                 new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("30.00"), null),
-                new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("22.00"), null)), null)))
+                new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("22.00"), null)), null, null)))
                 .isInstanceOf(PaymentValidationException.class);
         verify(invoiceRepository, never()).save(any());
     }
@@ -264,7 +264,7 @@ class InvoiceServiceTest {
 
         assertThatThrownBy(() -> charge(new InvoicePaymentRequest(List.of(
                 new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("52.00"), null),
-                new PaymentEntryRequest(PaymentMethod.YAPE, BigDecimal.ZERO, null)), null)))
+                new PaymentEntryRequest(PaymentMethod.YAPE, BigDecimal.ZERO, null)), null, null)))
                 .isInstanceOf(PaymentValidationException.class);
         verify(invoiceRepository, never()).save(any());
     }
@@ -275,7 +275,7 @@ class InvoiceServiceTest {
         stubValidationDependencies();
 
         assertThatThrownBy(() -> charge(new InvoicePaymentRequest(List.of(
-                new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("50.00"), null)), null)))
+                new PaymentEntryRequest(PaymentMethod.EFECTIVO, new BigDecimal("50.00"), null)), null, null)))
                 .isInstanceOf(PaymentValidationException.class);
         verify(invoiceRepository, never()).save(any());
     }
@@ -286,7 +286,7 @@ class InvoiceServiceTest {
         stubValidationDependencies();
 
         assertThatThrownBy(() -> charge(new InvoicePaymentRequest(List.of(
-                new PaymentEntryRequest(PaymentMethod.YAPE, new BigDecimal("60.00"), null)), null)))
+                new PaymentEntryRequest(PaymentMethod.YAPE, new BigDecimal("60.00"), null)), null, null)))
                 .isInstanceOf(PaymentValidationException.class);
         verify(invoiceRepository, never()).save(any());
     }

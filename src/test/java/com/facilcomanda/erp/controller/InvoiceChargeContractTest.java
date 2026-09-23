@@ -48,7 +48,7 @@ class InvoiceChargeContractTest {
     @Test
     void chargeOrder_requestMultimetodo_devuelve201ConPaymentsYResumen() throws Exception {
         InvoiceResponse stub = new InvoiceResponse(
-                1L, "INV-1-42-x", 42L, 42L, 9L, "Mesa 3",
+                1L, "INV-1-42-x", "BOLETA", 42L, 42L, 9L, "Mesa 3",
                 new BigDecimal("52.00"), new BigDecimal("52.00"), new BigDecimal("0.00"),
                 "MIXTO", LocalDateTime.now(), 3L, "cajero@facilcomanda.test", null,
                 List.of(

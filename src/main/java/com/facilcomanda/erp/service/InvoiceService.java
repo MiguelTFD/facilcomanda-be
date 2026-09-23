@@ -17,6 +17,7 @@ import com.facilcomanda.erp.model.enums.PaymentMethod;
 import com.facilcomanda.erp.model.enums.TableState;
 import com.facilcomanda.erp.repository.InvoiceRepository;
 import com.facilcomanda.erp.repository.OrderRepository;
+import com.facilcomanda.erp.repository.OrganizationRepository;
 import com.facilcomanda.erp.repository.RestaurantTableRepository;
 import com.facilcomanda.erp.repository.UserRepository;
 import java.math.BigDecimal;
@@ -41,19 +42,25 @@ public class InvoiceService {
     private final OrderRepository orderRepository;
     private final RestaurantTableRepository restaurantTableRepository;
     private final UserRepository userRepository;
+    private final OrganizationRepository organizationRepository;
     private final Clock clock;
 
     public InvoiceService(InvoiceRepository invoiceRepository, OrderRepository orderRepository,
-            RestaurantTableRepository restaurantTableRepository, UserRepository userRepository, Clock clock) {
+            RestaurantTableRepository restaurantTableRepository, UserRepository userRepository,
+            OrganizationRepository organizationRepository, Clock clock) {
         this.invoiceRepository = invoiceRepository;
         this.orderRepository = orderRepository;
         this.restaurantTableRepository = restaurantTableRepository;
         this.userRepository = userRepository;
+        this.organizationRepository = organizationRepository;
         this.clock = clock;
     }
 
     @Transactional(rollbackFor = Exception.class)
     public InvoiceResponse chargeOrder(Long orderId, InvoicePaymentRequest request, Long organizationId, String userEmail) {
+        organizationRepository.findLockedById(organizationId)
+                .orElseThrow(() -> new RuntimeException("Organization not found"));
+
         Order order = orderRepository.findLockedByIdAndOrganizationId(orderId, organizationId)
                 .orElseThrow(() -> new RuntimeException("Order not found or unauthorized"));
 
@@ -84,7 +91,7 @@ public class InvoiceService {
         invoice.setOrganizationId(organizationId);
         invoice.setOrder(order);
         invoice.setOrderNumber(order.getId());
-        invoice.setInvoiceNumber(buildInvoiceNumber(organizationId, order.getId(), paidAt));
+        invoice.setInvoiceNumber(buildInvoiceNumber(organizationId, order.getId(), paidAt, request.invoiceType()));
         invoice.setOrderTotal(orderTotal);
         invoice.setAmountPaid(totals.sum());
         invoice.setChangeAmount(totals.sum().subtract(orderTotal));
@@ -204,8 +211,25 @@ public class InvoiceService {
     private record PaymentTotals(BigDecimal sum, String summaryMethod) {
     }
 
-    private String buildInvoiceNumber(Long organizationId, Long orderId, LocalDateTime paidAt) {
-        return "INV-" + organizationId + "-" + orderId + "-" + paidAt.format(INVOICE_DATE_FORMAT);
+    private String buildInvoiceNumber(Long organizationId, Long orderId, LocalDateTime paidAt, String invoiceType) {
+        if (invoiceType == null || invoiceType.trim().isEmpty() || 
+            (!invoiceType.equalsIgnoreCase("FACTURA") && !invoiceType.equalsIgnoreCase("BOLETA"))) {
+            return "INV-" + organizationId + "-" + orderId + "-" + paidAt.format(INVOICE_DATE_FORMAT);
+        }
+
+        String prefix = "FACTURA".equalsIgnoreCase(invoiceType) ? "E001-" : "EB01-";
+        
+        return invoiceRepository.findFirstByOrganizationIdAndInvoiceNumberStartingWithOrderByInvoiceNumberDesc(organizationId, prefix)
+                .map(Invoice::getInvoiceNumber)
+                .map(lastNumber -> {
+                    try {
+                        long nextVal = Long.parseLong(lastNumber.substring(prefix.length())) + 1;
+                        return String.format("%s%08d", prefix, nextVal);
+                    } catch (Exception e) {
+                        return String.format("%s%08d", prefix, 1L);
+                    }
+                })
+                .orElse(String.format("%s%08d", prefix, 1L));
     }
 
     private InvoiceResponse mapToResponse(Invoice invoice) {

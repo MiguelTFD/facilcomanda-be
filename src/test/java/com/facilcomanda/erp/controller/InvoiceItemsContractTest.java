@@ -43,7 +43,7 @@ class InvoiceItemsContractTest {
 
     private InvoiceResponse stubConItems() {
         return new InvoiceResponse(
-                1L, "INV-7-42-20260801143205", 42L, 42L, 9L, "Mesa 3",
+                1L, "INV-7-42-20260801143205", "FACTURA", 42L, 42L, 9L, "Mesa 3",
                 new BigDecimal("55.00"), new BigDecimal("60.00"), new BigDecimal("5.00"),
                 "EFECTIVO", LocalDateTime.of(2026, 8, 1, 14, 32), 3L, "cajero@facilcomanda.test", null,
                 List.of(new PaymentEntryResponse(PaymentMethod.EFECTIVO, new BigDecimal("60.00"), null)),

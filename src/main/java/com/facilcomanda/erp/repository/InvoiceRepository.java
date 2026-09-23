@@ -16,6 +16,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     List<Invoice> findByOrganizationIdOrderByPaidAtDesc(Long organizationId);
     boolean existsByOrder_IdAndOrganizationId(Long orderId, Long organizationId);
 
+    Optional<Invoice> findFirstByOrganizationIdAndInvoiceNumberStartingWithOrderByInvoiceNumberDesc(Long organizationId, String prefix);
+
     // --- Carga del ticket de venta (feature 028) ---
     // Dos consultas y no una: Hibernate lanza MultipleBagFetchException al hacer
     // join fetch de dos colecciones List en la misma query. La segunda consulta
