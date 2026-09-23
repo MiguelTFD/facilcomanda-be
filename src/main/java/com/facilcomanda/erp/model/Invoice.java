@@ -47,6 +47,9 @@ public class Invoice {
     @Column(name = "invoice_number", nullable = false, unique = true, length = 80)
     private String invoiceNumber;
 
+    @Column(name = "invoice_type", length = 50)
+    private String invoiceType;
+
     @Column(name = "order_total", nullable = false, precision = 12, scale = 2)
     private BigDecimal orderTotal;
 
@@ -119,6 +122,14 @@ public class Invoice {
 
     public void setInvoiceNumber(String invoiceNumber) {
         this.invoiceNumber = invoiceNumber;
+    }
+
+    public String getInvoiceType() {
+        return invoiceType;
+    }
+
+    public void setInvoiceType(String invoiceType) {
+        this.invoiceType = invoiceType;
     }
 
     public BigDecimal getOrderTotal() {

@@ -92,6 +92,7 @@ public class InvoiceService {
         invoice.setPaidAt(paidAt);
         invoice.setCashier(cashier);
         invoice.setCashierEmail(cashier.getEmail());
+        invoice.setInvoiceType(request.invoiceType());
         invoice.setNotes(request.notes());
 
         for (PaymentEntryRequest entry : request.payments()) {
@@ -217,6 +218,7 @@ public class InvoiceService {
         return new InvoiceResponse(
                 invoice.getId(),
                 invoice.getInvoiceNumber(),
+                invoice.getInvoiceType(),
                 invoice.getOrder() != null ? invoice.getOrder().getId() : null,
                 invoice.getOrderNumber(),
                 invoice.getRestaurantTableId(),

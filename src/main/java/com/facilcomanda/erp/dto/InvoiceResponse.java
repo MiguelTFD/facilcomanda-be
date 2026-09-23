@@ -7,6 +7,7 @@ import java.util.List;
 public record InvoiceResponse(
         Long id,
         String invoiceNumber,
+        String invoiceType,
         Long orderId,
         Long orderNumber,
         Long restaurantTableId,
